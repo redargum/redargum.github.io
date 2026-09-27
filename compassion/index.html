@@ -470,13 +470,7 @@ class View {
     ctx.font = '10px system-ui';
     ctx.textAlign = 'right';
     ctx.fillText('50%', pad.l - 3, y(0.5) + 3);
-    ctx.save();
-    ctx.textAlign = 'left';
-    ctx.fillStyle = css('--main');
-    ctx.fillText('red leads', pad.l + 4, pad.t + 11);
-    ctx.fillStyle = css('--opp');
-    ctx.fillText('blue leads', pad.l + 4, pad.t + ih - 4);
-    ctx.restore();
+
     ctx.textAlign = 'left';
     ctx.fillText(`${hist.length}s`, pad.l, h - 5);
 
@@ -496,7 +490,7 @@ class View {
     // Which side leads is the side of the midline the share sits on, so shade the gap in
     // that side's colour: the handover then reads as the band changing colour and side.
     const px = k => pad.l + (hist.length === 1 ? 0 : k / (hist.length - 1)) * iw;
-    for (const [above, color] of [[true, tint(css('--main'), 0.20)], [false, tint(css('--opp'), 0.20)]]) {
+    for (const [above, color] of [[true, tint(css('--main'), 0.30)], [false, tint(css('--opp'), 0.30)]]) {
       ctx.beginPath();
       ctx.moveTo(px(0), y(0.5));
       hist.forEach((p, k) => ctx.lineTo(px(k), y(above ? Math.max(0.5, p.red) : Math.min(0.5, p.red))));
