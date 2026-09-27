@@ -118,7 +118,7 @@ const PHI_INV = 0.618;
 /** Every tunable the model reads. `rules.js` renders the panel from this object. */
 export const P = {
   compassion:  { v: 0.50, min: 0,    max: 1,    step: 0.01,  label: 'Compassion' },
-  drain:       { v: 1.0, min: 0, max: 1, step: 0.01, label: 'Share the stick carries' },
+  drain:       { v: 0.05, min: 0, max: 1, step: 0.01, label: 'Share the stick carries' },
   divide:      { v: 5.0, min: 1.5, max: 30, step: 0.1, label: 'Division threshold (x mean)' },
   starve:      { v: 0.06, min: 0.01, max: 3, step: 0.01, label: 'Starvation floor' },
   land:        { v: 0.30, min: 0.005, max: 1,   step: 0.005, label: 'Energy per square' },
@@ -133,9 +133,10 @@ export const P = {
   absorbFloor: { v: PHI_INV, min: 0.05, max: 1, step: 0.01, label: 'Absorption floor' },
   surcharge:   { v: 0.35, min: 0,    max: 2,    step: 0.05,  label: 'Destruction surcharge' },
   conform:     { v: 0.030, min: 0, max: 0.3,  step: 0.001,  label: 'Conformity to the patron' },
+  conformAt:   { v: 0.50,  min: 0.01, max: 1, step: 0.01,   label: 'Conforms fully above (x patron)' },
   lambda:      { v: 0.004, min: 0, max: 0.05, step: 0.0005, label: 'Neglect drift' },
   defect:      { v: 0.006, min: 0, max: 0.05, step: 0.0005, label: 'Drift of the unattached' },
-  radical:     { v: 0.10,  min: 0, max: 1,    step: 0.01,   label: 'Radicalisation' },
+  radical:     { v: 0.05,  min: 0, max: 1,    step: 0.01,   label: 'Radicalisation' },
   radicalSize: { v: 20,    min: 1, max: 200,  step: 1,      label: 'Size that radicalises normally' },
   povRef:      { v: 0.90, min: 0.1, max: 8, step: 0.1, label: 'Neglect reference (x mean)' },
   recruitR:    { v: 36,   min: 6,    max: 60,   step: 1,     label: 'Recruitment radius' },
@@ -155,8 +156,8 @@ export const RULES = [
     text: () => 'The field is a torus: leave one side and you arrive at the other, and two cells are always as far apart as the shorter way round. Nothing piles up against a wall and no position is privileged.' },
   { name: 'Cells and sticks', keys: ['repel', 'stick', 'drag'],
     text: () => 'A node is a cell with energy, inertia and one alignment number, 0 for the challenger and 1 for the incumbent. Cells repel in proportion to their energy; a stick between two of them resists that repulsion with the smaller of the two energies. Nothing sits on a lattice — position is an outcome.' },
-  { name: 'Tribute and patronage', keys: ['drain', 'compassion'],
-    text: () => 'Every stick moves a share of what is held, and compassion sets which way along the chain of command it travels: at 0 the child keeps nothing, at 1 the parent gives everything away, at 0.5 the stick carries nothing either way. A gift from above is split between the children; a child owes only its own. Tribute and patronage are the same rule with the sign reversed.' },
+  { name: 'Tribute', keys: ['drain', 'compassion'],
+    text: () => 'Every stick carries a share of what the child holds up to its parent. The parameter is what the stick would carry, compassion is how much of that is withheld, so at 0 the child keeps nothing and at 1 nothing moves at all.' },
   { name: 'Compassion', keys: ['compassion'],
     text: () => 'One number for the whole field, not a trait cells carry. Which way a cell sends energy across its sticks. Below 0.5 it takes from whoever has less and the distribution goes heavy-tailed; above 0.5 it gives, and holdings level out. This one parameter decides whether the election grows a tail.' },
   { name: 'The center is emergent', keys: [],
@@ -169,8 +170,8 @@ export const RULES = [
     text: () => 'Past a multiple of the mean cell size a cell splits. The child keeps the parent’s views exactly, the energy is halved between them, and the two start joined by a stick. Structures grow rather than being placed.' },
   { name: 'Land, upkeep and starvation', keys: ['land', 'upkeep', 'metabolic', 'starve'],
     text: () => 'Every square of the field yields the same income, split between whoever is standing in it, so a cell alone on its square takes all of it and ten crowded together take a tenth each. Ground is therefore worth holding and worth spreading over, and a structure that packs itself into one corner starves. Each cell then pays upkeep on what it holds, and one that cannot hold the floor dies. The floor is a plain amount: tied to the mean it made a few rich isolated cells raise the bar that killed every crowded one, and tied to what a solitary cell sustains it moved faster than the income it was meant to track. Upkeep rises more slowly than size, as real metabolism does, so being large is cheaper per unit held \u2014 the economy of scale that lets a drained-from hierarchy run away from the cells feeding it.' },
-  { name: 'Falling in line', keys: ['conform'],
-    text: () => 'A cell holding a stick takes on the view of the cell above it. A structure therefore comes to think one thing, and a structure taken from a rival converts to its new owner rather than keeping the loyalty it was captured with.' },
+  { name: 'Falling in line', keys: ['conform', 'conformAt'],
+    text: () => 'A cell holding a stick takes on the view of the cell above it, by <code>conform * min(1, r / conformAt)</code> of the gap between them, where <code>r</code> is what it holds as a fraction of what its patron holds. At or above the threshold it conforms fully; below it the pull falls off in a straight line to nothing, so the destitute bottom of a structure is the part least held by it. A structure therefore comes to think one thing, and a structure taken from a rival converts to its new owner rather than keeping the loyalty it was captured with.' },
   { name: 'Hardening', keys: ['radical', 'compassion', 'radicalSize'],
     text: () => 'Every cell moves toward the pole it is already nearer, at a rate set by <code>1 - c</code> and multiplied by two things that harden anyone: holding less than the average, and belonging to a structure smaller than the reference. A destitute cell in a marginal faction hardens several times faster than a comfortable one in a large one. A field that takes everything from its weakest leaves nobody undecided; one that supports them leaves nobody with much to be sure about. Turnout rises with conviction, so hardening is also what brings a structure to the polls.' },
   { name: 'The unattached', keys: ['defect'],
@@ -445,8 +446,6 @@ export class Model {
 
   /** Each stick moves energy from the smaller cell to the larger, held back by compassion. */
   drainPass() {
-    const COMPASSION = clamp(P.compassion.v, 0.01, 0.985);
-
     const { e, alive, flow, kids } = this;
     flow.fill(0);
     kids.fill(0);
@@ -455,12 +454,14 @@ export class Model {
       const p = this.parentOf(i);
       if (p >= 0) kids[p]++;
     }
-    const f = P.drain.v * (1 - 2 * COMPASSION);
+    // The same shape as the hardening rate: the parameter is what a stick would carry, and
+    // compassion is how much of it is withheld. Nothing moves at 1, all of it at 0.
+    const f = P.drain.v * (1 - clamp(P.compassion.v, 0, 1));
     for (let i = 0; i < CAP; i++) {
       if (!alive[i]) continue;
       const p = this.parentOf(i);
       if (p < 0) continue;
-      const amount = f > 0 ? e[i] * f : e[p] * f / kids[p];
+      const amount = e[i] * f;
       flow[i] -= amount;
       flow[p] += amount;
     }
@@ -485,7 +486,11 @@ export class Model {
       let v = a[i] + (a[i] === 0.5 ? 0 : hardening * poor * small * ((a[i] > 0.5 ? 1 : 0) - a[i]));
       const patron = this.parentOf(i);
       if (patron >= 0) {
-        v += P.conform.v * (a[patron] - a[i]);
+        // Someone far poorer than the cell above them conforms less, falling off linearly
+        // from the threshold to nothing at all at no energy
+        const ratio = e[i] / Math.max(1e-6, e[patron]);
+        const w = Math.min(1, ratio / P.conformAt.v);
+        v += P.conform.v * w * (a[patron] - a[i]);
         const poverty = 1 - e[i] / (P.povRef.v * this.meanE);
         if (poverty > 0) v += lam * poverty * (a[patron] > 0.5 ? -1 : 1);
       } else if (kids[i] === 0) {
@@ -670,11 +675,9 @@ export function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
 export const BINS = 50;
 
 export const EP = {
-  apathy:      { v: 0.10, min: 0,    max: 0.6,  step: 0.01,  label: 'Turnout of the indifferent' },
-  convinced:   { v: 0.72, min: 0.1,  max: 1,    step: 0.01,  label: 'Turnout of the committed' },
   temp:        { v: 0.16, min: 0.02, max: 0.8,  step: 0.01,  label: 'Preference sharpness' },
+  parityFall:  { v: 0.30, min: 0.05, max: 1,    step: 0.01,  label: 'How slowly turnout falls' },
   loyalty:     { v: 0.95, min: 0,    max: 1,    step: 0.01,  label: 'Loyalty to the head' },
-  mobilise:    { v: 1.00, min: 0,    max: 1,    step: 0.01,  label: 'How far a structure drags you out' },
 };
 
 export const ELECTION_RULES = [
@@ -682,10 +685,8 @@ export const ELECTION_RULES = [
     text: () => 'Every vote is cast willingly and counted as cast. There is no stuffing, no inflation and no quota. Whatever shape the returns take, the mechanism producing it is social, not criminal.' },
   { name: 'Capture', keys: ['loyalty'],
     text: () => 'A cell votes the way the head of its structure does, in proportion to how far that head towers over it — <code>e_head / (e_head + e_self)</code>. Someone answering to nobody votes their own preference. Loyalty scales the whole effect, and at zero everyone votes for themselves.' },
-  { name: 'Who turns out', keys: ['apathy', 'convinced'],
-    text: () => 'Conviction decides it, and conviction is distance from the midpoint. Someone holding a view strongly enough votes on it whichever side it is; someone in the middle does not think the exercise means anything and stays home. A committed challenger turns out as readily as a committed loyalist.' },
-  { name: 'Being turned out', keys: ['mobilise'],
-    text: () => 'Capture closes the gap between whatever you were willing to do and voting: the oppressed turn out near completely, because it is not really their decision. Turnout and unanimity therefore rise together, which is why the anomaly appears along the turnout axis.' },
+  { name: 'Who turns out', keys: ['parityFall'],
+    text: () => 'A cell answering to nobody votes on conviction alone, <code>|2a - 1|</code>: certain at either pole, not at all in the middle. A cell answering to someone votes on how far it stands from them, <code>min(1, e / e_parent) ^ parityFall</code>: fully at parity, and falling away the further its patron towers over it, gently rather than in proportion. Being dominated puts you off going, it does not march you out.' },
   { name: 'Preference', keys: ['temp'],
     text: () => 'Left alone, a cell votes a logistic of how far its own alignment sits above the midpoint. Sharpness sets how decisively a mild preference becomes a vote.' },
 ];
@@ -701,7 +702,7 @@ export function runElection(model, { loyalty = true, seed = 1 } = {}) {
   const scatter = new Float32Array(2 * 4000);
   let points = 0, redVotes = 0, totalVotes = 0, stations = 0, captured = 0;
 
-  const { apathy, convinced, temp, mobilise } = EP;
+  const { temp, parityFall } = EP;
   const loyaltyK = loyalty ? EP.loyalty.v : 0;
   const stride = Math.max(1, (model.live / 4000) | 0);
   let seen = 0;
@@ -719,9 +720,12 @@ export function runElection(model, { loyalty = true, seed = 1 } = {}) {
     const headSide = head === i ? own : (model.a[head] > 0.5 ? 1 : 0);
     const share = clamp((1 - grip) * own + grip * headSide, 0, 1);
 
-    const conviction = Math.abs(model.a[i] - 0.5) * 2;
-    const willing = apathy.v + (convinced.v - apathy.v) * conviction;
-    const turnout = clamp(willing + mobilise.v * grip * (1 - willing), 0.01, 1);
+    // Answering to nobody, only conviction brings you out. Answering to someone, what brings
+    // you out is standing near enough to them to matter: parity votes, domination does not.
+    const parent = model.parentOf(i);
+    const turnout = parent < 0
+      ? Math.abs(model.a[i] - 0.5) * 2
+      : Math.pow(Math.min(1, model.e[i] / Math.max(1e-9, model.e[parent])), parityFall.v);
     const votes = turnout;   // every station carries the same electorate
     const bin = Math.min(BINS - 1, (turnout * BINS) | 0);
     red[bin] += votes * share;

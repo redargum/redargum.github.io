@@ -219,6 +219,7 @@ button.wide { width: 100%; }
       <input type="range" id="p-draw" min="1" max="30" step="1" value="1">
     </div>
     <div class="row">
+      <button id="btn-defaults">Default</button>
       <button id="btn-pause">Pause</button>
       <button id="btn-reset">Reset</button>
       <button id="btn-debug">DBG</button>
@@ -716,7 +717,7 @@ const STEPS_PER_FRAME = 1;
 const PANEL_MS = 1000;
 
 /** Bump whenever a parameter's meaning or range changes, so stored values cannot outlive it. */
-const SCHEMA = 3;
+const SCHEMA = 4;
 
 const config = new Config('compassion');
 const model = new Model();
@@ -739,6 +740,10 @@ drawInput.oninput();
 
 const rate = { steps: 0, frames: 0, since: performance.now(), stepsPerSec: 0, fps: 0 };
 
+/** Every parameter as shipped, taken before anything stored can overwrite it. */
+const DEFAULTS = [[P, {}], [EP, {}]];
+for (const [params, saved] of DEFAULTS) for (const k in params) saved[k] = params[k].v;
+
 /** One sample per second of the figures worth watching move. */
 const series = [];
 const SERIES_MAX = 240;
@@ -758,6 +763,19 @@ document.getElementById('btn-pause').onclick = e => {
   paused = !paused;
   e.target.textContent = paused ? 'Resume' : 'Pause';
   e.target.classList.toggle('on', paused);
+};
+document.getElementById('btn-defaults').onclick = () => {
+  for (const [params, saved] of DEFAULTS) {
+    for (const k in saved) {
+      params[k].v = saved[k];
+      const input = document.getElementById(`x-${k}`);
+      if (input) { input.value = saved[k]; setLabel(k, saved[k]); }
+    }
+  }
+  syncHero();
+  config.clear();
+  hold();
+  dbg.info('parameters back to their defaults');
 };
 document.getElementById('btn-reset').onclick = () => { model.reset(); series.length = 0; hold(); };
 document.getElementById('btn-debug').onclick = () => debugPanel.toggle();
