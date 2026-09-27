@@ -27,6 +27,21 @@ view.onResize = () => {
   view.drawSweep(sweepPoints, P.compassion.v);
 };
 
+const speedInput = document.getElementById('p-speed');
+const speedLabel = document.getElementById('v-speed');
+speedInput.oninput = () => { speedLabel.textContent = `${speedInput.value}\u00d7`; };
+speedInput.oninput();
+
+const drawInput = document.getElementById('p-draw');
+const drawLabel = document.getElementById('v-draw');
+drawInput.oninput = () => {
+  const n = Number(drawInput.value);
+  drawLabel.textContent = n === 1 ? 'every frame' : `${n} frames`;
+};
+drawInput.oninput();
+
+const rate = { steps: 0, frames: 0, since: performance.now(), stepsPerSec: 0, fps: 0 };
+
 let paused = false;
 let sweepJob = null;
 let sweepPoints = [];
@@ -35,7 +50,7 @@ let control = null;
 let sinceVote = 0;
 let electionSeed = 1;
 
-buildControls(document.getElementById('g-model'), P, k => k !== 'compassion');
+buildControls(document.getElementById('g-model'), P, k => k !== 'compassion' && k !== 'drag');
 buildControls(document.getElementById('g-election'), EP, () => true);
 bindHero();
 restore();
@@ -140,6 +155,8 @@ function renderStats() {
     ['Largest cell', s.eMax.toFixed(0)],
     ['Destroyed', s.destroyed],
     ['Divided', s.divided],
+    ['Sim steps / s', rate.stepsPerSec],
+    ['Frames drawn / s', Math.round(rate.fps / Number(drawInput.value))],
   ].map(([k, v]) => `<div class="stat"><span>${k}</span><span>${v}</span></div>`).join('');
 }
 
@@ -209,30 +226,39 @@ function fmt(v) {
   return Math.abs(v) >= 100 ? v.toFixed(0) : Math.abs(v) >= 1 ? v.toFixed(2) : v.toFixed(3);
 }
 
-const speedInput = document.getElementById('p-speed');
-const speedLabel = document.getElementById('v-speed');
-speedInput.oninput = () => { speedLabel.textContent = `${speedInput.value}\u00d7`; };
-speedInput.oninput();
-
-let acc = 0, last = performance.now(), netDue = 0;
+let acc = 0, last = performance.now(), frameNo = 0;
 function frame(now) {
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
   requestAnimationFrame(frame);
 
-  if (sweepJob) { advanceSweep(); view.drawNetwork(model); return; }
+  frameNo++;
+  const drawEvery = Number(drawInput.value);
+  const drawing = frameNo % drawEvery === 0;
+
+  if (sweepJob) { advanceSweep(); if (drawing) view.drawNetwork(model); return; }
   if (paused) return;
 
   acc += dt * Number(speedInput.value);
   const stepDt = 1 / SIM_HZ;
   let steps = 0;
-  const budget = Math.max(1, Math.min(90, Math.round(dt * SIM_HZ * Number(speedInput.value)) + 1));
+  const budget = Math.max(1, Math.min(400, Math.round(dt * SIM_HZ * Number(speedInput.value)) + 1));
   while (acc >= stepDt && steps < budget) { model.step(stepDt); acc -= stepDt; steps++; }
   if (steps === 0) return;
   acc = Math.min(acc, stepDt);
 
-  netDue -= dt;
-  if (netDue <= 0) { view.drawNetwork(model); netDue = 1 / 30; }
+  rate.steps += steps;
+  rate.frames++;
+  if (now - rate.since >= 1000) {
+    const secs = (now - rate.since) / 1000;
+    rate.stepsPerSec = Math.round(rate.steps / secs);
+    rate.fps = Math.round(rate.frames / secs);
+    rate.steps = 0; rate.frames = 0; rate.since = now;
+  }
+
+  if (drawing) view.drawNetwork(model);
+
+  if (drawing) renderStats();
 
   sinceVote += dt;
   if (sinceVote >= ELECTION_EVERY) hold();
