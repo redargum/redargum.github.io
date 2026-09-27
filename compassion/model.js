@@ -112,7 +112,7 @@ const PHI_INV = 0.618;
 
 /** Every tunable the model reads. `rules.js` renders the panel from this object. */
 export const P = {
-  compassion:  { v: 0.10, min: 0,    max: 1,    step: 0.01,  label: 'Compassion' },
+  compassion:  { v: 0.80, min: 0,    max: 1,    step: 0.01,  label: 'Compassion' },
   drain:       { v: 1.0, min: 0, max: 1, step: 0.01, label: 'Share the stick carries' },
   divide:      { v: 5.0, min: 1.5, max: 30, step: 0.1, label: 'Division threshold (x mean)' },
   starve:      { v: 0.06, min: 0.01, max: 3, step: 0.01, label: 'Starvation floor' },
@@ -591,7 +591,9 @@ export class Model {
         const d2 = ddx * ddx + ddy * ddy;
         if (d2 < bestD) { bestD = d2; best = j; }
       });
-      if (best >= 0) { this.link(best, i); kids[i]++; }
+      // A parentless cell is a root, and the recruiter may already be somewhere in its tree:
+      // linking them then closes a loop that no later pass can walk out of.
+      if (best >= 0 && this.headOf(i) !== best) { this.link(best, i); kids[i]++; }
     }
   }
 
@@ -677,11 +679,13 @@ export class Model {
   /** The head of i's structure: follow the sticks up until nobody is above. */
   headOf(i) {
     let cur = i;
-    for (let hop = 0; hop < 64; hop++) {
+    for (let hop = 0; hop <= CAP; hop++) {
       const p = this.parentOf(cur);
       if (p < 0) return cur;
       cur = p;
     }
+    // More hops than there are cells means a loop; cut it here rather than walk it forever
+    this.parent[cur] = -1;
     return cur;
   }
 
