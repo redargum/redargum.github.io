@@ -135,6 +135,7 @@ export const P = {
   conform:     { v: 0.030, min: 0, max: 0.3,  step: 0.001,  label: 'Conformity to the patron' },
   lambda:      { v: 0.004, min: 0, max: 0.05, step: 0.0005, label: 'Neglect drift' },
   defect:      { v: 0.006, min: 0, max: 0.05, step: 0.0005, label: 'Drift of the unattached' },
+  radical:     { v: 1.0,  min: 0, max: 1,    step: 0.01,   label: 'Radicalisation' },
   povRef:      { v: 0.90, min: 0.1, max: 8, step: 0.1, label: 'Neglect reference (x mean)' },
   recruitR:    { v: 36,   min: 6,    max: 60,   step: 1,     label: 'Recruitment radius' },
   recruitMin:  { v: 0.40, min: 0.05, max: 6, step: 0.05, label: 'Recruitment minimum (x mean)' },
@@ -169,8 +170,10 @@ export const RULES = [
     text: () => 'Every square of the field yields the same income, split between whoever is standing in it, so a cell alone on its square takes all of it and ten crowded together take a tenth each. Ground is therefore worth holding and worth spreading over, and a structure that packs itself into one corner starves. Each cell then pays upkeep on what it holds, and one that cannot hold the floor dies. The floor is a plain amount: tied to the mean it made a few rich isolated cells raise the bar that killed every crowded one, and tied to what a solitary cell sustains it moved faster than the income it was meant to track. Upkeep rises more slowly than size, as real metabolism does, so being large is cheaper per unit held \u2014 the economy of scale that lets a drained-from hierarchy run away from the cells feeding it.' },
   { name: 'Falling in line', keys: ['conform'],
     text: () => 'A cell holding a stick takes on the view of the cell above it. A structure therefore comes to think one thing, and a structure taken from a rival converts to its new owner rather than keeping the loyalty it was captured with.' },
+  { name: 'Hardening', keys: ['radical', 'compassion'],
+    text: () => 'Every cell moves toward the pole it is already nearer, covering <code>1 - c</code> of the distance each step: at compassion 0 it arrives at once, at 1 it does not move at all. A field that takes everything from its weakest leaves nobody undecided; one that supports them leaves nobody with much to be sure about. Turnout rises with conviction, so hardening is also what brings a structure to the polls.' },
   { name: 'The unattached', keys: ['defect'],
-    text: () => 'A cell answering to nobody drifts toward whichever side is out of power. Nothing organises it and nothing feeds it, so it opposes whoever holds the apparatus \u2014 and since the side it drifts to is set by who is ahead, growing large enough to govern turns that supply off and points it at you instead.' },
+    text: () => 'A cell with neither a patron nor a follower drifts toward whichever side is out of power. Nothing organises it and nothing feeds it, so it opposes whoever holds the apparatus \u2014 and since the side it drifts to is set by who is ahead, growing large enough to govern turns that supply off and points it at you instead.' },
   { name: 'Neglect breeds dissent', keys: ['lambda', 'povRef'],
     text: () => 'A cell near the starvation floor turns against the side its own patron belongs to, pulling against the conformity above. Because energy runs uphill the periphery is always the poorest, so it defects without anyone deciding it should \u2014 and because it defects from whoever rules it rather than toward a fixed side, neither side is a trap the other can never escape.' },
   { name: 'Destruction', keys: ['theta', 'surcharge', 'absorbFloor'],
@@ -462,17 +465,22 @@ export class Model {
     }
   }
   alignPass() {
-    const { a, e, alive } = this;
+    const { a, e, alive, kids } = this;
     const lam = P.lambda.v;
+    // Relaxation toward the nearer pole: at compassion 0 a cell arrives in one step, at 1 it
+    // does not move. A cell exactly at the midpoint has no nearer pole and is left undecided.
+    const hardening = P.radical.v * (1 - clamp(P.compassion.v, 0, 1));
     for (let i = 0; i < CAP; i++) {
       if (!alive[i]) continue;
-      let v = a[i];
+      let v = a[i] + (a[i] === 0.5 ? 0 : hardening * ((a[i] > 0.5 ? 1 : 0) - a[i]));
       const patron = this.parentOf(i);
       if (patron >= 0) {
         v += P.conform.v * (a[patron] - a[i]);
         const poverty = 1 - e[i] / (P.povRef.v * this.meanE);
         if (poverty > 0) v += lam * poverty * (a[patron] > 0.5 ? -1 : 1);
-      } else {
+      } else if (kids[i] === 0) {
+        // Only a cell with neither a patron nor a follower is a free agent. A head has no
+        // patron either, and giving it this rule had every leader drifting to oppose itself.
         v += P.defect.v * (this.challengerPole - a[i]);
       }
       a[i] = clamp(v, 0, 1);
