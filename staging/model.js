@@ -133,6 +133,7 @@ export const P = {
   absorbFloor: { v: PHI_INV, min: 0.05, max: 1, step: 0.01, label: 'Absorption floor' },
   surcharge:   { v: 0.35, min: 0,    max: 2,    step: 0.05,  label: 'Destruction surcharge' },
   conform:     { v: 0.030, min: 0, max: 0.3,  step: 0.001,  label: 'Conformity to the patron' },
+  conformAt:   { v: 0.50,  min: 0.01, max: 1, step: 0.01,   label: 'Conforms fully above (x patron)' },
   lambda:      { v: 0.004, min: 0, max: 0.05, step: 0.0005, label: 'Neglect drift' },
   defect:      { v: 0.006, min: 0, max: 0.05, step: 0.0005, label: 'Drift of the unattached' },
   radical:     { v: 0.05,  min: 0, max: 1,    step: 0.01,   label: 'Radicalisation' },
@@ -169,8 +170,8 @@ export const RULES = [
     text: () => 'Past a multiple of the mean cell size a cell splits. The child keeps the parent’s views exactly, the energy is halved between them, and the two start joined by a stick. Structures grow rather than being placed.' },
   { name: 'Land, upkeep and starvation', keys: ['land', 'upkeep', 'metabolic', 'starve'],
     text: () => 'Every square of the field yields the same income, split between whoever is standing in it, so a cell alone on its square takes all of it and ten crowded together take a tenth each. Ground is therefore worth holding and worth spreading over, and a structure that packs itself into one corner starves. Each cell then pays upkeep on what it holds, and one that cannot hold the floor dies. The floor is a plain amount: tied to the mean it made a few rich isolated cells raise the bar that killed every crowded one, and tied to what a solitary cell sustains it moved faster than the income it was meant to track. Upkeep rises more slowly than size, as real metabolism does, so being large is cheaper per unit held \u2014 the economy of scale that lets a drained-from hierarchy run away from the cells feeding it.' },
-  { name: 'Falling in line', keys: ['conform'],
-    text: () => 'A cell holding a stick takes on the view of the cell above it. A structure therefore comes to think one thing, and a structure taken from a rival converts to its new owner rather than keeping the loyalty it was captured with.' },
+  { name: 'Falling in line', keys: ['conform', 'conformAt'],
+    text: () => 'A cell holding a stick takes on the view of the cell above it, by <code>conform * min(1, r / conformAt)</code> of the gap between them, where <code>r</code> is what it holds as a fraction of what its patron holds. At or above the threshold it conforms fully; below it the pull falls off in a straight line to nothing, so the destitute bottom of a structure is the part least held by it. A structure therefore comes to think one thing, and a structure taken from a rival converts to its new owner rather than keeping the loyalty it was captured with.' },
   { name: 'Hardening', keys: ['radical', 'compassion', 'radicalSize'],
     text: () => 'Every cell moves toward the pole it is already nearer, at a rate set by <code>1 - c</code> and multiplied by two things that harden anyone: holding less than the average, and belonging to a structure smaller than the reference. A destitute cell in a marginal faction hardens several times faster than a comfortable one in a large one. A field that takes everything from its weakest leaves nobody undecided; one that supports them leaves nobody with much to be sure about. Turnout rises with conviction, so hardening is also what brings a structure to the polls.' },
   { name: 'The unattached', keys: ['defect'],
@@ -485,7 +486,11 @@ export class Model {
       let v = a[i] + (a[i] === 0.5 ? 0 : hardening * poor * small * ((a[i] > 0.5 ? 1 : 0) - a[i]));
       const patron = this.parentOf(i);
       if (patron >= 0) {
-        v += P.conform.v * (a[patron] - a[i]);
+        // Someone far poorer than the cell above them conforms less, falling off linearly
+        // from the threshold to nothing at all at no energy
+        const ratio = e[i] / Math.max(1e-6, e[patron]);
+        const w = Math.min(1, ratio / P.conformAt.v);
+        v += P.conform.v * w * (a[patron] - a[i]);
         const poverty = 1 - e[i] / (P.povRef.v * this.meanE);
         if (poverty > 0) v += lam * poverty * (a[patron] > 0.5 ? -1 : 1);
       } else if (kids[i] === 0) {
