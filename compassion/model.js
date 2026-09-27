@@ -113,7 +113,7 @@ const PHI_INV = 0.618;
 /** Every tunable the model reads. `rules.js` renders the panel from this object. */
 export const P = {
   compassion:  { v: 0.10, min: 0,    max: 1,    step: 0.01,  label: 'Compassion' },
-  drain:       { v: 0.020, min: 0, max: 0.2, step: 0.001, label: 'Drain per stick' },
+  drain:       { v: 1.0, min: 0, max: 1, step: 0.01, label: 'Share the stick carries' },
   divide:      { v: 5.0, min: 1.5, max: 30, step: 0.1, label: 'Division threshold (x mean)' },
   starve:      { v: 0.06, min: 0.01, max: 3, step: 0.01, label: 'Starvation floor' },
   land:        { v: 0.30, min: 0.005, max: 1,   step: 0.005, label: 'Energy per square' },
@@ -155,8 +155,8 @@ export const RULES = [
     text: () => 'The field is a torus: leave one side and you arrive at the other, and two cells are always as far apart as the shorter way round. Nothing piles up against a wall and no position is privileged.' },
   { name: 'Cells and sticks', keys: ['repel', 'stick', 'drag'],
     text: () => 'A node is a cell with energy, inertia and one alignment number, 0 for the challenger and 1 for the incumbent. Cells repel in proportion to their energy; a stick between two of them resists that repulsion with the smaller of the two energies. Nothing sits on a lattice — position is an outcome.' },
-  { name: 'Energy runs uphill', keys: ['drain', 'compassion'],
-    text: () => 'Every stick moves a fixed quantum of energy per second between its two cells, and the compassion of the larger one sets the direction: below 0.5 it takes from the smaller, above 0.5 it gives. Extraction and redistribution are the same rule with the sign reversed. This is the whole concentration mechanism: tribute flows toward whoever already has more.' },
+  { name: 'Tribute and patronage', keys: ['drain', 'compassion'],
+    text: () => 'Every stick moves a share of what is held, and compassion sets which way along the chain of command it travels: at 0 the child keeps nothing, at 1 the parent gives everything away, at 0.5 the stick carries nothing either way. A gift from above is split between the children; a child owes only its own. Tribute and patronage are the same rule with the sign reversed.' },
   { name: 'Compassion', keys: ['compassion'],
     text: () => 'One number for the whole field, not a trait cells carry. Which way a cell sends energy across its sticks. Below 0.5 it takes from whoever has less and the distribution goes heavy-tailed; above 0.5 it gives, and holdings level out. This one parameter decides whether the election grows a tail.' },
   { name: 'The center is emergent', keys: [],
@@ -452,18 +452,22 @@ export class Model {
   drainPass() {
     const COMPASSION = clamp(P.compassion.v, 0.01, 0.985);
 
-    const { e, c, parent, alive, flow } = this;
+    const { e, alive, flow, kids } = this;
     flow.fill(0);
+    kids.fill(0);
+    for (let i = 0; i < CAP; i++) {
+      if (!alive[i]) continue;
+      const p = this.parentOf(i);
+      if (p >= 0) kids[p]++;
+    }
+    const f = P.drain.v * (1 - 2 * COMPASSION);
     for (let i = 0; i < CAP; i++) {
       if (!alive[i]) continue;
       const p = this.parentOf(i);
       if (p < 0) continue;
-      const lo = e[i] < e[p] ? i : p;
-      const hi = lo === i ? p : i;
-      const rate = P.drain.v * (1 - 2 * COMPASSION);
-      const amount = rate > 0 ? Math.min(e[lo], rate) : -Math.min(e[hi], -rate);
-      flow[lo] -= amount;
-      flow[hi] += amount;
+      const amount = f > 0 ? e[i] * f : e[p] * f / kids[p];
+      flow[i] -= amount;
+      flow[p] += amount;
     }
     for (let i = 0; i < CAP; i++) {
       if (alive[i]) e[i] = Math.max(0, e[i] + flow[i]);
