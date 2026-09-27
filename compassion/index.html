@@ -470,6 +470,13 @@ class View {
     ctx.font = '10px system-ui';
     ctx.textAlign = 'right';
     ctx.fillText('50%', pad.l - 3, y(0.5) + 3);
+    ctx.save();
+    ctx.textAlign = 'left';
+    ctx.fillStyle = css('--main');
+    ctx.fillText('red leads', pad.l + 4, pad.t + 11);
+    ctx.fillStyle = css('--opp');
+    ctx.fillText('blue leads', pad.l + 4, pad.t + ih - 4);
+    ctx.restore();
     ctx.textAlign = 'left';
     ctx.fillText(`${hist.length}s`, pad.l, h - 5);
 
@@ -486,14 +493,25 @@ class View {
       });
       ctx.strokeStyle = color; ctx.lineWidth = width; ctx.stroke();
     };
+    // Which side leads is the side of the midline the share sits on, so shade the gap in
+    // that side's colour: the handover then reads as the band changing colour and side.
+    const px = k => pad.l + (hist.length === 1 ? 0 : k / (hist.length - 1)) * iw;
+    for (const [above, color] of [[true, tint(css('--main'), 0.20)], [false, tint(css('--opp'), 0.20)]]) {
+      ctx.beginPath();
+      ctx.moveTo(px(0), y(0.5));
+      hist.forEach((p, k) => ctx.lineTo(px(k), y(above ? Math.max(0.5, p.red) : Math.min(0.5, p.red))));
+      ctx.lineTo(px(hist.length - 1), y(0.5));
+      ctx.closePath();
+      ctx.fillStyle = color;
+      ctx.fill();
+    }
+
     line(p => p.turnout, this.textMuted, 1);
     line(p => p.bloc, css('--accent'), 1);
     line(p => p.red, css('--main'), 2);
 
     const last = hist[hist.length - 1];
     ctx.textAlign = 'right';
-    ctx.fillStyle = css('--main');
-    ctx.fillText('red', pad.l + iw - 4, y(last.red) - 5);
     ctx.fillStyle = css('--accent');
     ctx.fillText('bloc', pad.l + iw - 4, y(last.bloc) - 5);
     ctx.fillStyle = this.textMuted;
@@ -807,7 +825,7 @@ function hold() {
   view.drawHistogram(result, control);
   view.drawScatter(result);
   view.drawHistory(series);
-  document.getElementById('ro-hist2').textContent = `red ${(result.redShare * 100).toFixed(1)}%`;
+  document.getElementById('ro-hist2').textContent = `red share ${(result.redShare * 100).toFixed(1)}%`;
   document.getElementById('ro-hist').textContent =
     `incumbent ${(result.mainShare * 100).toFixed(1)}% · bloc vote ${(result.blocShare * 100).toFixed(1)}%`;
   renderStats();
