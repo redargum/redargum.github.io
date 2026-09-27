@@ -129,23 +129,24 @@ export const P = {
   theta:       { v: 0.30, min: 0.02, max: 1,    step: 0.01,  label: 'Destruction threshold' },
   absorbFloor: { v: PHI_INV, min: 0.05, max: 1, step: 0.01, label: 'Absorption floor' },
   surcharge:   { v: 0.35, min: 0,    max: 2,    step: 0.05,  label: 'Destruction surcharge' },
+  conform:     { v: 0.030, min: 0, max: 0.3,  step: 0.001,  label: 'Conformity to the patron' },
   lambda:      { v: 0.004, min: 0, max: 0.05, step: 0.0005, label: 'Neglect drift' },
+  defect:      { v: 0.006, min: 0, max: 0.05, step: 0.0005, label: 'Drift of the unattached' },
   povRef:      { v: 0.90, min: 0.1, max: 8, step: 0.1, label: 'Neglect reference (x mean)' },
-  recruitR:    { v: 22,   min: 6,    max: 60,   step: 1,     label: 'Recruitment radius' },
+  recruitR:    { v: 36,   min: 6,    max: 60,   step: 1,     label: 'Recruitment radius' },
   recruitMin:  { v: 0.40, min: 0.05, max: 6, step: 0.05, label: 'Recruitment minimum (x mean)' },
   fanout:      { v: 3.0,  min: 1,    max: 12,   step: 0.5,   label: 'Children per unit size' },
   campaign:    { v: 0.02, min: 0,    max: 0.5,  step: 0.005, label: 'Campaign force' },
   warchest:    { v: 1.25, min: 1,    max: 4,    step: 0.05,  label: 'Strength before advancing' },
   casualties:  { v: 0.30, min: 0,    max: 1,    step: 0.05,  label: 'Casualties taking a rival' },
   surveyEvery: { v: 20,   min: 5,    max: 120,  step: 5,     label: 'Steps between surveys' },
-  breakFree:   { v: 1.20, min: 1,    max: 4,    step: 0.05,  label: 'Break-free ratio' },
+  breakFree:   { v: 2.50, min: 1,    max: 4,    step: 0.05,  label: 'Break-free ratio' },
   tolerance:   { v: 0.35, min: 0.02, max: 1,    step: 0.01,  label: 'Confidence bound' },
   backfire:    { v: 0.55, min: 0,    max: 2,    step: 0.05,  label: 'Backfire' },
   mediaTop:    { v: 14,   min: 0,    max: 60,   step: 1,     label: 'Broadcasters' },
   mediaR:      { v: 130,  min: 20,   max: 400,  step: 5,     label: 'Broadcast reach' },
   mediaK:      { v: 0.022,min: 0,    max: 0.2,  step: 0.001, label: 'Broadcast strength' },
   recruitGap:  { v: 0.45, min: 0.05, max: 1,    step: 0.05,  label: 'Recruitment tolerance' },
-  erosion:     { v: 0,    min: 0,    max: 1,    step: 1,     label: 'Compassion erosion' },
 };
 
 /** One line per rule; `text` reads live values out of `P`, so the panel cannot go stale. */
@@ -157,7 +158,7 @@ export const RULES = [
   { name: 'Energy runs uphill', keys: ['drain', 'compassion'],
     text: () => 'Every stick moves a fixed quantum of energy per second between its two cells, and the compassion of the larger one sets the direction: below 0.5 it takes from the smaller, above 0.5 it gives. Extraction and redistribution are the same rule with the sign reversed. This is the whole concentration mechanism: tribute flows toward whoever already has more.' },
   { name: 'Compassion', keys: ['compassion'],
-    text: () => 'Which way a cell sends energy across its sticks. Below 0.5 it takes from whoever has less and the distribution goes heavy-tailed; above 0.5 it gives, and holdings level out. This one parameter decides whether the election grows a tail.' },
+    text: () => 'One number for the whole field, not a trait cells carry. Which way a cell sends energy across its sticks. Below 0.5 it takes from whoever has less and the distribution goes heavy-tailed; above 0.5 it gives, and holdings level out. This one parameter decides whether the election grows a tail.' },
   { name: 'The center is emergent', keys: [],
     text: () => 'No node is designated. The head of a structure is whichever cell holds the most energy, and it changes hands when another overtakes it.' },
   { name: 'Breaking free', keys: ['breakFree'],
@@ -174,8 +175,12 @@ export const RULES = [
     text: () => 'The largest cells broadcast their alignment across a radius far beyond their own neighbourhood. Few transmitters with wide reach is what separates propaganda from conformity, and it is what makes holding the apparatus worth having: the pull is toward the broadcaster, not toward the local average.' },
   { name: 'Word of mouth', keys: ['influenceR', 'influenceK', 'influenceC'],
     text: () => 'A cell spends energy to pull the alignment of every neighbour in its radius toward its own, with force rising with its energy and with <code>1 - c</code>: a compassionate cell persuades weakly, a ruthless one coerces. What a cell registers as pressure is that force divided by its own energy: domination is force measured against the ability to resist it, so the same push lands hard on a destitute neighbour and glances off a rich one.' },
+  { name: 'Falling in line', keys: ['conform'],
+    text: () => 'A cell holding a stick takes on the view of the cell above it. A structure therefore comes to think one thing, and a structure taken from a rival converts to its new owner rather than keeping the loyalty it was captured with.' },
+  { name: 'The unattached', keys: ['defect'],
+    text: () => 'A cell answering to nobody drifts toward whichever side is out of power. Nothing organises it and nothing feeds it, so it opposes whoever holds the apparatus \u2014 and since the side it drifts to is set by who is ahead, growing large enough to govern turns that supply off and points it at you instead.' },
   { name: 'Neglect breeds dissent', keys: ['lambda', 'povRef'],
-    text: () => 'A cell near the starvation floor turns against the side its own patron belongs to. Because energy runs uphill the periphery is always the poorest, so it defects without anyone deciding it should \u2014 and because it defects from whoever rules it rather than toward a fixed side, neither side is a trap the other can never escape.' },
+    text: () => 'A cell near the starvation floor turns against the side its own patron belongs to, pulling against the conformity above. Because energy runs uphill the periphery is always the poorest, so it defects without anyone deciding it should \u2014 and because it defects from whoever rules it rather than toward a fixed side, neither side is a trap the other can never escape.' },
   { name: 'Destruction', keys: ['theta', 'surcharge', 'absorbFloor'],
     text: () => `A cell destroys a near opponent when the alignment gap exceeds <code>theta / (1 - c)</code>, when it holds more energy, and when the victim holds at least the absorption floor of the attacker's energy — you cannot eat something far beneath you, which is why hierarchies have to grow intermediate layers. The attacker pays the victim's full energy plus the surcharge.` },
   { name: 'Campaigns', keys: ['campaign', 'warchest', 'surveyEvery'],
@@ -186,8 +191,6 @@ export const RULES = [
     text: () => 'A cell accelerates toward opponents it could destroy and away from opponents that could destroy it. Fronts and territories come out of this, not out of any map.' },
   { name: 'Repression is not free', keys: ['surcharge', 'influenceC'],
     text: () => 'Destroying costs more than the victim held, and that energy is then not available for enforcement. Nothing forces the trade-off; it falls out of the two costs.' },
-  { name: 'Compassion erosion', keys: ['erosion'],
-    text: () => 'Off by default. With it on, a cell that is attacked loses compassion, so violence lowers the threshold for more violence. Compassion then becomes an outcome and can no longer be swept as a cause.' },
 ];
 
 export class Model {
@@ -200,12 +203,9 @@ export class Model {
     this.vy = new Float32Array(CAP);
     this.e = new Float32Array(CAP);
     this.a = new Float32Array(CAP);
-    this.cOff = new Float32Array(CAP);
-    this.c = new Float32Array(CAP);
     this.parent = new Int32Array(CAP);
     this.pgen = new Int32Array(CAP);
     this.gen = new Int32Array(CAP);
-    this.voters = new Float32Array(CAP);
     this.alive = new Uint8Array(CAP);
     this.dA = new Float32Array(CAP);
     this.kids = new Int32Array(CAP);
@@ -215,6 +215,7 @@ export class Model {
     this.strength = new Float32Array(CAP);
     this.target = new Int32Array(CAP).fill(-1);
     this.surveyDue = 0;
+    this.challengerPole = 0;
 
     this.free = new Int32Array(CAP);
     this.freeTop = 0;
@@ -247,7 +248,6 @@ export class Model {
       }
     }
 
-    this.applyCompassion();
     this.grid = new Grid(WORLD_W, WORLD_H, Math.max(P.influenceR.v, 24), CAP);
   }
 
@@ -268,11 +268,8 @@ export class Model {
     this.vx[i] = 0; this.vy[i] = 0;
     this.e[i] = energy;
     this.a[i] = 0.5;
-    this.cOff[i] = 0;
-    this.c[i] = clamp(P.compassion.v + this.cOff[i], 0.01, 0.985);
     this.parent[i] = -1;
     this.gen[i]++;
-    this.voters[i] = 1;
     this.alive[i] = 1;
     this.live++;
     return i;
@@ -297,13 +294,6 @@ export class Model {
   link(child, par) {
     this.parent[child] = par;
     this.pgen[child] = this.gen[par];
-  }
-
-  applyCompassion() {
-    const m = P.compassion.v;
-    for (let i = 0; i < CAP; i++) {
-      if (this.alive[i]) this.c[i] = clamp(m + this.cOff[i], 0.01, 0.985);
-    }
   }
 
   step() {
@@ -373,6 +363,9 @@ export class Model {
   survey() {
     if (--this.surveyDue > 0) return;
     this.surveyDue = P.surveyEvery.v | 0;
+    let redCells = 0, blueCells = 0;
+    for (let i = 0; i < CAP; i++) if (this.alive[i]) (this.a[i] > 0.5 ? redCells++ : blueCells++);
+    this.challengerPole = redCells > blueCells ? 0 : 1;
     const { head, strength, target, alive, e, a } = this;
     strength.fill(0);
     for (let i = 0; i < CAP; i++) {
@@ -457,6 +450,8 @@ export class Model {
 
   /** Each stick moves energy from the smaller cell to the larger, held back by compassion. */
   drainPass() {
+    const COMPASSION = clamp(P.compassion.v, 0.01, 0.985);
+
     const { e, c, parent, alive, flow } = this;
     flow.fill(0);
     for (let i = 0; i < CAP; i++) {
@@ -465,7 +460,7 @@ export class Model {
       if (p < 0) continue;
       const lo = e[i] < e[p] ? i : p;
       const hi = lo === i ? p : i;
-      const rate = P.drain.v * (1 - 2 * c[hi]);
+      const rate = P.drain.v * (1 - 2 * COMPASSION);
       const amount = rate > 0 ? Math.min(e[lo], rate) : -Math.min(e[hi], -rate);
       flow[lo] -= amount;
       flow[hi] += amount;
@@ -476,12 +471,14 @@ export class Model {
   }
 
   influencePass() {
+    const ROUGHNESS = 1 - clamp(P.compassion.v, 0.01, 0.985);
+
     const { x, y, a, e, c, alive, dA } = this;
     dA.fill(0);
     const R = P.influenceR.v, R2 = R * R, k = P.influenceK.v;
     for (let i = 0; i < CAP; i++) {
       if (!alive[i]) continue;
-      const infl = (1 - c[i]) * e[i];
+      const infl = ROUGHNESS * e[i];
       if (infl < 0.05) continue;
       const xi = x[i], yi = y[i], ai = a[i];
       let spent = 0;
@@ -505,6 +502,8 @@ export class Model {
    * worth anything — the pull is toward the broadcaster, not toward the local average.
    */
   broadcastPass() {
+    const ROUGHNESS = 1 - clamp(P.compassion.v, 0.01, 0.985);
+
     const { x, y, a, e, c, alive, dA, top } = this;
     const k = Math.min(P.mediaTop.v | 0, top.length);
     if (k === 0) return;
@@ -526,7 +525,7 @@ export class Model {
     for (let t = 0; t < n; t++) {
       const i = top[t];
       if (!alive[i]) continue;
-      const reach = (1 - c[i]) * (e[i] / mean);
+      const reach = ROUGHNESS * (e[i] / mean);
       if (reach < 0.05) continue;
       const xi = x[i], yi = y[i], ai = a[i];
       for (let j = 0; j < CAP; j++) {
@@ -546,10 +545,13 @@ export class Model {
     for (let i = 0; i < CAP; i++) {
       if (!alive[i]) continue;
       let v = a[i] + dA[i];
-      const poverty = 1 - e[i] / (P.povRef.v * this.meanE);
-      if (poverty > 0) {
-        const patron = this.parentOf(i);
-        if (patron >= 0) v += lam * poverty * (a[patron] > 0.5 ? -1 : 1);
+      const patron = this.parentOf(i);
+      if (patron >= 0) {
+        v += P.conform.v * (a[patron] - a[i]);
+        const poverty = 1 - e[i] / (P.povRef.v * this.meanE);
+        if (poverty > 0) v += lam * poverty * (a[patron] > 0.5 ? -1 : 1);
+      } else {
+        v += P.defect.v * (this.challengerPole - a[i]);
       }
       a[i] = clamp(v, 0, 1);
     }
@@ -590,11 +592,13 @@ export class Model {
   }
 
   destroyPass() {
+    const ROUGHNESS = 1 - clamp(P.compassion.v, 0.01, 0.985);
+
     const { x, y, a, e, c, alive } = this;
     const R = P.influenceR.v * 0.55, R2 = R * R;
     for (let i = 0; i < CAP; i++) {
       if (!alive[i]) continue;
-      const gap = P.theta.v / (1 - c[i]);
+      const gap = P.theta.v / ROUGHNESS;
       if (gap > 1) continue;
       const xi = x[i], yi = y[i], ai = a[i], ei = e[i];
       let victim = -1;
@@ -617,7 +621,6 @@ export class Model {
       const cost = e[victim] * (1 + P.surcharge.v);
       if (ei <= cost) continue;
       e[i] = ei - cost;
-      if (P.erosion.v) this.cOff[victim] = Math.max(-0.5, this.cOff[victim] - 0.06);
       this.kill(victim);
       this.destroyed++;
     }
@@ -679,17 +682,16 @@ export class Model {
   }
 
   stats() {
-    let red = 0, blue = 0, eSum = 0, cSum = 0, eMax = 0, head = -1;
+    let red = 0, blue = 0, eSum = 0, eMax = 0, head = -1;
     for (let i = 0; i < CAP; i++) {
       if (!this.alive[i]) continue;
       eSum += this.e[i];
-      cSum += this.c[i];
       if (this.a[i] > 0.5) red++; else blue++;
       if (this.e[i] > eMax) { eMax = this.e[i]; head = i; }
     }
     return {
       live: this.live, red, blue, eSum, eMax, head,
-      compassion: cSum / Math.max(1, this.live),
+      compassion: P.compassion.v,
       destroyed: this.destroyed, divided: this.divided, conquered: this.conquered,
     };
   }
@@ -797,7 +799,7 @@ export function runElection(model, { loyalty = true, seed = 1 } = {}) {
     const conviction = Math.abs(model.a[i] - 0.5) * 2;
     const willing = apathy.v + (convinced.v - apathy.v) * conviction;
     const turnout = clamp(willing + mobilise.v * grip * (1 - willing), 0.01, 1);
-    const votes = model.voters[i] * turnout;
+    const votes = turnout;   // every station carries the same electorate
     const bin = Math.min(BINS - 1, (turnout * BINS) | 0);
     red[bin] += votes * share;
     blue[bin] += votes * (1 - share);

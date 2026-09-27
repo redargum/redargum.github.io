@@ -223,10 +223,6 @@ button.wide { width: 100%; }
       <button data-preset="purge">Over-repressive</button>
     </div>
     <div class="ctl" style="margin-top:8px">
-      <label for="p-speed"><span>Speed</span><span id="v-speed"></span></label>
-      <input type="range" id="p-speed" min="1" max="120" step="1" value="10">
-    </div>
-    <div class="ctl">
       <label for="p-draw"><span>Draw every</span><span id="v-draw"></span></label>
       <input type="range" id="p-draw" min="1" max="30" step="1" value="1">
     </div>
@@ -698,6 +694,9 @@ function initDebugPanel() {
 
 const ELECTION_EVERY = 6;
 
+/** Steps advanced per frame. Fixed: the field is only legible at one rate. */
+const STEPS_PER_FRAME = 1;
+
 /** Bump whenever a parameter's meaning or range changes, so stored values cannot outlive it. */
 const SCHEMA = 2;
 
@@ -718,11 +717,6 @@ view.onResize = () => {
   if (result) { view.drawHistogram(result, control); view.drawScatter(result); }
   view.drawSweep(sweepPoints, P.compassion.v);
 };
-
-const speedInput = document.getElementById('p-speed');
-const speedLabel = document.getElementById('v-speed');
-speedInput.oninput = () => { speedLabel.textContent = `${speedInput.value}\u00d7`; };
-speedInput.oninput();
 
 const drawInput = document.getElementById('p-draw');
 const drawLabel = document.getElementById('v-draw');
@@ -794,7 +788,6 @@ function bindHero() {
   input.min = p.min; input.max = p.max; input.step = p.step; input.value = p.v;
   input.oninput = () => {
     p.v = Number(input.value);
-    model.applyCompassion();
     syncHero();
     persist();
   };
@@ -809,7 +802,6 @@ function syncHero() {
 
 function applyPreset(name) {
   for (const [k, v] of Object.entries(PRESETS[name])) P[k].v = v;
-  model.applyCompassion();
   syncHero();
   for (const key in P) {
     const input = document.getElementById(`x-${key}`);
@@ -867,10 +859,9 @@ function advanceSweep() {
   const job = sweepJob;
   if (job.settle === 0) {
     P.compassion.v = job.c;
-    model.applyCompassion();
     syncHero();
   }
-  const chunk = Math.max(10, Number(speedInput.value) * 3);
+  const chunk = STEPS_PER_FRAME * 3;
   for (let k = 0; k < chunk; k++) model.step();
   job.settle += chunk;
   if (job.settle < 150) return;
@@ -885,7 +876,6 @@ function advanceSweep() {
   job.c = Math.round((job.c - 0.05) * 100) / 100;
   if (job.c < -0.001) {
     P.compassion.v = job.restore;
-    model.applyCompassion();
     syncHero();
     sweepJob = null;
     document.getElementById('btn-sweep').classList.remove('on');
@@ -917,7 +907,6 @@ function restore() {
       if (Number.isFinite(v) && v >= p.min && v <= p.max) p.v = v;
     }
   }
-  model.applyCompassion();
   syncHero();
   for (const [params, prefix] of [[P, 'x-'], [EP, 'x-']]) {
     for (const k in params) {
@@ -944,10 +933,9 @@ function frame(now) {
   if (sweepJob) { advanceSweep(); if (drawing) view.drawNetwork(model); return; }
   if (paused) return;
 
-  const steps = Number(speedInput.value);
-  for (let k = 0; k < steps; k++) model.step();
+  for (let k = 0; k < STEPS_PER_FRAME; k++) model.step();
 
-  rate.steps += steps;
+  rate.steps += STEPS_PER_FRAME;
   rate.frames++;
   if (now - rate.since >= 1000) {
     const secs = (now - rate.since) / 1000;
