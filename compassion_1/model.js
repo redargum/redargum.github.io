@@ -136,6 +136,7 @@ export const P = {
   lambda:      { v: 0.004, min: 0, max: 0.05, step: 0.0005, label: 'Neglect drift' },
   defect:      { v: 0.006, min: 0, max: 0.05, step: 0.0005, label: 'Drift of the unattached' },
   radical:     { v: 0.10,  min: 0, max: 1,    step: 0.01,   label: 'Radicalisation' },
+  radicalSize: { v: 20,    min: 1, max: 200,  step: 1,      label: 'Size that radicalises normally' },
   povRef:      { v: 0.90, min: 0.1, max: 8, step: 0.1, label: 'Neglect reference (x mean)' },
   recruitR:    { v: 36,   min: 6,    max: 60,   step: 1,     label: 'Recruitment radius' },
   recruitMin:  { v: 0.40, min: 0.05, max: 6, step: 0.05, label: 'Recruitment minimum (x mean)' },
@@ -170,8 +171,8 @@ export const RULES = [
     text: () => 'Every square of the field yields the same income, split between whoever is standing in it, so a cell alone on its square takes all of it and ten crowded together take a tenth each. Ground is therefore worth holding and worth spreading over, and a structure that packs itself into one corner starves. Each cell then pays upkeep on what it holds, and one that cannot hold the floor dies. The floor is a plain amount: tied to the mean it made a few rich isolated cells raise the bar that killed every crowded one, and tied to what a solitary cell sustains it moved faster than the income it was meant to track. Upkeep rises more slowly than size, as real metabolism does, so being large is cheaper per unit held \u2014 the economy of scale that lets a drained-from hierarchy run away from the cells feeding it.' },
   { name: 'Falling in line', keys: ['conform'],
     text: () => 'A cell holding a stick takes on the view of the cell above it. A structure therefore comes to think one thing, and a structure taken from a rival converts to its new owner rather than keeping the loyalty it was captured with.' },
-  { name: 'Hardening', keys: ['radical', 'compassion'],
-    text: () => 'Every cell moves toward the pole it is already nearer, covering <code>1 - c</code> of the distance each step: at compassion 0 it arrives at once, at 1 it does not move at all. A field that takes everything from its weakest leaves nobody undecided; one that supports them leaves nobody with much to be sure about. Turnout rises with conviction, so hardening is also what brings a structure to the polls.' },
+  { name: 'Hardening', keys: ['radical', 'compassion', 'radicalSize'],
+    text: () => 'Every cell moves toward the pole it is already nearer, at a rate set by <code>1 - c</code> and multiplied by two things that harden anyone: holding less than the average, and belonging to a structure smaller than the reference. A destitute cell in a marginal faction hardens several times faster than a comfortable one in a large one. A field that takes everything from its weakest leaves nobody undecided; one that supports them leaves nobody with much to be sure about. Turnout rises with conviction, so hardening is also what brings a structure to the polls.' },
   { name: 'The unattached', keys: ['defect'],
     text: () => 'A cell with neither a patron nor a follower drifts toward whichever side is out of power. Nothing organises it and nothing feeds it, so it opposes whoever holds the apparatus \u2014 and since the side it drifts to is set by who is ahead, growing large enough to govern turns that supply off and points it at you instead.' },
   { name: 'Neglect breeds dissent', keys: ['lambda', 'povRef'],
@@ -206,6 +207,7 @@ export class Model {
     this.flow = new Float32Array(CAP);
     this.head = new Int32Array(CAP).fill(-1);
     this.strength = new Float32Array(CAP);
+    this.members = new Int32Array(CAP);
     this.target = new Int32Array(CAP).fill(-1);
     this.surveyDue = 0;
     this.challengerPole = 0;
@@ -357,13 +359,15 @@ export class Model {
     let redCells = 0, blueCells = 0;
     for (let i = 0; i < CAP; i++) if (this.alive[i]) (this.a[i] > 0.5 ? redCells++ : blueCells++);
     this.challengerPole = redCells > blueCells ? 0 : 1;
-    const { head, strength, target, alive, e, a } = this;
+    const { head, strength, members, target, alive, e, a } = this;
     strength.fill(0);
+    members.fill(0);
     for (let i = 0; i < CAP; i++) {
       if (!alive[i]) { head[i] = -1; continue; }
       const h = this.headOf(i);
       head[i] = h;
       strength[h] += e[i];
+      members[h]++;
     }
     // Each structure picks the nearest rival it outweighs, and notes the nearest that outweighs it.
     target.fill(-1);
@@ -465,14 +469,20 @@ export class Model {
     }
   }
   alignPass() {
-    const { a, e, alive, kids } = this;
+    const { a, e, alive, kids, head, members } = this;
     const lam = P.lambda.v;
     // Relaxation toward the nearer pole: at compassion 0 a cell arrives in one step, at 1 it
     // does not move. A cell exactly at the midpoint has no nearer pole and is left undecided.
     const hardening = P.radical.v * (1 - clamp(P.compassion.v, 0, 1));
+    const meanE = Math.max(1e-6, this.meanE), refSize = Math.max(1, P.radicalSize.v);
     for (let i = 0; i < CAP; i++) {
       if (!alive[i]) continue;
-      let v = a[i] + (a[i] === 0.5 ? 0 : hardening * ((a[i] > 0.5 ? 1 : 0) - a[i]));
+      // Destitution and marginality both harden: each multiplier is 1 for a cell of average
+      // energy in a structure of the reference size, so the rate above keeps its meaning.
+      const poor = clamp(meanE / Math.max(1e-6, e[i]), 0, 4);
+      const h = head[i];
+      const small = clamp(refSize / Math.max(1, h >= 0 ? members[h] : 1), 0, 4);
+      let v = a[i] + (a[i] === 0.5 ? 0 : hardening * poor * small * ((a[i] > 0.5 ? 1 : 0) - a[i]));
       const patron = this.parentOf(i);
       if (patron >= 0) {
         v += P.conform.v * (a[patron] - a[i]);
