@@ -16,7 +16,6 @@
   --main:      #e66767;
   --opp:       #3987e5;
   --mid:       #6a6f78;
-  --sweep:     #199e70;
   --edge:      #39414f;
   --grid:      #222a36;
 
@@ -45,7 +44,7 @@ body {
 #panels {
   height: 240px;
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr;
+  grid-template-columns: 2fr 1fr;
   gap: 1px;
   background: var(--border);
   border-top: 1px solid var(--border);
@@ -181,11 +180,6 @@ button.wide { width: 100%; }
       <h2>Turnout / share</h2>
       <canvas id="scatter"></canvas>
     </div>
-    <div class="panel">
-      <h2>Compassion sweep</h2>
-      <div class="readout" id="ro-sweep"></div>
-      <canvas id="sweep"></canvas>
-    </div>
   </div>
 </div>
 
@@ -202,8 +196,7 @@ button.wide { width: 100%; }
       <div class="meter"><div id="m-compassion"></div></div>
     </div>
     <div class="row">
-      <button id="btn-rules">Rules</button>
-      <button id="btn-sweep">Sweep compassion</button>
+      <button id="btn-rules" class="wide">Rules</button>
     </div>
   </div>
 
@@ -279,7 +272,6 @@ function tint(hexColor, alpha) {
 
 class View {
   constructor() {
-    this.sweepColor = css('--sweep');
     this.textMuted = css('--muted');
     this.gridColor = css('--grid');
     this.edge = css('--edge');
@@ -293,7 +285,7 @@ class View {
     });
 
     this.canvases = {};
-    for (const id of ['net', 'hist', 'scatter', 'sweep']) {
+    for (const id of ['net', 'hist', 'scatter']) {
       const el = document.getElementById(id);
       this.canvases[id] = { el, ctx: el.getContext('2d', { alpha: false }) };
     }
@@ -454,51 +446,6 @@ class View {
     ctx.restore();
   }
 
-  /** Administrative share against compassion: the claim the page exists to make. */
-  drawSweep(points, live) {
-    const { ctx, w, h } = this.clear('sweep');
-    const pad = { l: 32, r: 12, t: 26, b: 22 };
-    const iw = w - pad.l - pad.r, ih = h - pad.t - pad.b;
-
-    ctx.strokeStyle = this.gridColor;
-    ctx.strokeRect(pad.l + 0.5, pad.t + 0.5, iw, ih);
-
-    ctx.fillStyle = this.textMuted;
-    ctx.font = '10px system-ui';
-    ctx.textAlign = 'center';
-    ctx.fillText('compassion →', pad.l + iw / 2, h - 7);
-
-    if (points.length === 0) {
-      ctx.fillText('press Sweep compassion', pad.l + iw / 2, pad.t + ih / 2);
-      return;
-    }
-
-    const px = c => pad.l + c * iw;
-    const py = v => pad.t + ih - clamp(v / 0.5, 0, 1) * ih;
-
-    ctx.beginPath();
-    points.forEach((p, k) => (k === 0 ? ctx.moveTo(px(p.c), py(p.admin)) : ctx.lineTo(px(p.c), py(p.admin))));
-    ctx.strokeStyle = this.sweepColor;
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    const last = points[points.length - 1];
-    ctx.fillStyle = this.sweepColor;
-    ctx.beginPath();
-    ctx.arc(px(last.c), py(last.admin), 3, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.textAlign = last.c > 0.5 ? 'right' : 'left';
-    ctx.fillText('bloc vote', px(last.c) + (last.c > 0.5 ? -8 : 8), py(last.admin) - 6);
-
-    if (live) {
-      ctx.strokeStyle = 'rgba(255,255,255,.18)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(px(live), pad.t);
-      ctx.lineTo(px(live), pad.t + ih);
-      ctx.stroke();
-    }
-  }
 
   legend(ctx, x, y, items) {
     ctx.font = '10px system-ui';
@@ -682,10 +629,10 @@ function initDebugPanel() {
 }
 
 // ============================================================================
-// Wiring: loop, controls, presets, sweep
+// Wiring: loop, controls, presets
 // ============================================================================
 
-/** Wiring: the loop, the controls, the presets and the compassion sweep. */
+/** Wiring: the loop, the controls and the presets. */
 
 
 
@@ -715,7 +662,6 @@ initRules();
 view.onResize = () => {
   view.drawNetwork(model);
   if (result) { view.drawHistogram(result, control); view.drawScatter(result); }
-  view.drawSweep(sweepPoints, P.compassion.v);
 };
 
 const drawInput = document.getElementById('p-draw');
@@ -729,8 +675,6 @@ drawInput.oninput();
 const rate = { steps: 0, frames: 0, since: performance.now(), stepsPerSec: 0, fps: 0 };
 
 let paused = false;
-let sweepJob = null;
-let sweepPoints = [];
 let result = null;
 let control = null;
 let sinceVote = 0;
@@ -748,9 +692,8 @@ document.getElementById('btn-pause').onclick = e => {
   e.target.textContent = paused ? 'Resume' : 'Pause';
   e.target.classList.toggle('on', paused);
 };
-document.getElementById('btn-reset').onclick = () => { model.reset(); sweepPoints = []; hold(); };
+document.getElementById('btn-reset').onclick = () => { model.reset(); hold(); };
 document.getElementById('btn-debug').onclick = () => debugPanel.toggle();
-document.getElementById('btn-sweep').onclick = startSweep;
 document.getElementById('opt-control').onchange = hold;
 for (const b of document.querySelectorAll('[data-preset]')) {
   b.onclick = () => applyPreset(b.dataset.preset);
@@ -821,7 +764,6 @@ function hold() {
   sinceVote = 0;
   view.drawHistogram(result, control);
   view.drawScatter(result);
-  view.drawSweep(sweepPoints, P.compassion.v);
   document.getElementById('ro-hist').textContent =
     `incumbent ${(result.mainShare * 100).toFixed(1)}% · bloc vote ${(result.blocShare * 100).toFixed(1)}%`;
   renderStats();
@@ -844,44 +786,6 @@ function renderStats() {
     ['Sim steps / s', rate.stepsPerSec],
     ['Frames drawn / s', Math.round(rate.fps / Number(drawInput.value))],
   ].map(([k, v]) => `<div class="stat"><span>${k}</span><span>${v}</span></div>`).join('');
-}
-
-/** Step compassion down from 1, letting the model settle at each stop before voting. */
-function startSweep() {
-  if (sweepJob) { sweepJob = null; document.getElementById('btn-sweep').classList.remove('on'); return; }
-  sweepPoints = [];
-  sweepJob = { c: 1.0, settle: 0, restore: P.compassion.v };
-  document.getElementById('btn-sweep').classList.add('on');
-  dbg.info('sweep started');
-}
-
-function advanceSweep() {
-  const job = sweepJob;
-  if (job.settle === 0) {
-    P.compassion.v = job.c;
-    syncHero();
-  }
-  const chunk = STEPS_PER_FRAME * 3;
-  for (let k = 0; k < chunk; k++) model.step();
-  job.settle += chunk;
-  if (job.settle < 150) return;
-
-  const r = runElection(model, { loyalty: true, seed: 99 });
-  sweepPoints.push({ c: job.c, admin: r.blocShare });
-  sweepPoints.sort((a, b) => a.c - b.c);
-  view.drawSweep(sweepPoints, P.compassion.v);
-  document.getElementById('ro-sweep').textContent = `c=${job.c.toFixed(2)} · ${(r.blocShare * 100).toFixed(1)}%`;
-
-  job.settle = 0;
-  job.c = Math.round((job.c - 0.05) * 100) / 100;
-  if (job.c < -0.001) {
-    P.compassion.v = job.restore;
-    syncHero();
-    sweepJob = null;
-    document.getElementById('btn-sweep').classList.remove('on');
-    dbg.info('sweep done', { points: sweepPoints.length });
-    hold();
-  }
 }
 
 function persist() {
@@ -930,7 +834,6 @@ function frame(now) {
   const drawEvery = Number(drawInput.value);
   const drawing = frameNo % drawEvery === 0;
 
-  if (sweepJob) { advanceSweep(); if (drawing) view.drawNetwork(model); return; }
   if (paused) return;
 
   for (let k = 0; k < STEPS_PER_FRAME; k++) model.step();
