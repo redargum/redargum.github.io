@@ -118,7 +118,7 @@ const PHI_INV = 0.618;
 /** Every tunable the model reads. `rules.js` renders the panel from this object. */
 export const P = {
   compassion:  { v: 0.50, min: 0,    max: 1,    step: 0.01,  label: 'Compassion' },
-  drain:       { v: 0.1, min: 0, max: 1, step: 0.01, label: 'Share the stick carries' },
+  drain:       { v: 1.0, min: 0, max: 1, step: 0.01, label: 'Share the stick carries' },
   divide:      { v: 5.0, min: 1.5, max: 30, step: 0.1, label: 'Division threshold (x mean)' },
   starve:      { v: 0.06, min: 0.01, max: 3, step: 0.01, label: 'Starvation floor' },
   land:        { v: 0.30, min: 0.005, max: 1,   step: 0.005, label: 'Energy per square' },
@@ -155,8 +155,8 @@ export const RULES = [
     text: () => 'The field is a torus: leave one side and you arrive at the other, and two cells are always as far apart as the shorter way round. Nothing piles up against a wall and no position is privileged.' },
   { name: 'Cells and sticks', keys: ['repel', 'stick', 'drag'],
     text: () => 'A node is a cell with energy, inertia and one alignment number, 0 for the challenger and 1 for the incumbent. Cells repel in proportion to their energy; a stick between two of them resists that repulsion with the smaller of the two energies. Nothing sits on a lattice — position is an outcome.' },
-  { name: 'Tribute', keys: ['drain', 'compassion'],
-    text: () => 'Every stick carries a share of what the child holds up to its parent. The parameter is what the stick would carry, compassion is how much of that is withheld, so at 0 the child keeps nothing and at 1 nothing moves at all.' },
+  { name: 'Tribute and patronage', keys: ['drain', 'compassion'],
+    text: () => 'Every stick moves a share of what is held, and compassion sets which way along the chain of command it travels: at 0 the child keeps nothing, at 1 the parent gives everything away, at 0.5 the stick carries nothing either way. A gift from above is split between the children; a child owes only its own. Tribute and patronage are the same rule with the sign reversed.' },
   { name: 'Compassion', keys: ['compassion'],
     text: () => 'One number for the whole field, not a trait cells carry. Which way a cell sends energy across its sticks. Below 0.5 it takes from whoever has less and the distribution goes heavy-tailed; above 0.5 it gives, and holdings level out. This one parameter decides whether the election grows a tail.' },
   { name: 'The center is emergent', keys: [],
@@ -445,6 +445,8 @@ export class Model {
 
   /** Each stick moves energy from the smaller cell to the larger, held back by compassion. */
   drainPass() {
+    const COMPASSION = clamp(P.compassion.v, 0.01, 0.985);
+
     const { e, alive, flow, kids } = this;
     flow.fill(0);
     kids.fill(0);
@@ -453,14 +455,12 @@ export class Model {
       const p = this.parentOf(i);
       if (p >= 0) kids[p]++;
     }
-    // The same shape as the hardening rate: the parameter is what a stick would carry, and
-    // compassion is how much of it is withheld. Nothing moves at 1, all of it at 0.
-    const f = P.drain.v * (1 - clamp(P.compassion.v, 0, 1));
+    const f = P.drain.v * (1 - 2 * COMPASSION);
     for (let i = 0; i < CAP; i++) {
       if (!alive[i]) continue;
       const p = this.parentOf(i);
       if (p < 0) continue;
-      const amount = e[i] * f;
+      const amount = f > 0 ? e[i] * f : e[p] * f / kids[p];
       flow[i] -= amount;
       flow[p] += amount;
     }
