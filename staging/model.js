@@ -118,7 +118,7 @@ const PHI_INV = 0.618;
 /** Every tunable the model reads. `rules.js` renders the panel from this object. */
 export const P = {
   compassion:  { v: 0.50, min: 0,    max: 1,    step: 0.01,  label: 'Compassion' },
-  drain:       { v: 0.1, min: 0, max: 1, step: 0.01, label: 'Share the stick carries' },
+  drain:       { v: 0.05, min: 0, max: 1, step: 0.01, label: 'Share the stick carries' },
   divide:      { v: 5.0, min: 1.5, max: 30, step: 0.1, label: 'Division threshold (x mean)' },
   starve:      { v: 0.06, min: 0.01, max: 3, step: 0.01, label: 'Starvation floor' },
   land:        { v: 0.30, min: 0.005, max: 1,   step: 0.005, label: 'Energy per square' },
@@ -135,7 +135,7 @@ export const P = {
   conform:     { v: 0.030, min: 0, max: 0.3,  step: 0.001,  label: 'Conformity to the patron' },
   lambda:      { v: 0.004, min: 0, max: 0.05, step: 0.0005, label: 'Neglect drift' },
   defect:      { v: 0.006, min: 0, max: 0.05, step: 0.0005, label: 'Drift of the unattached' },
-  radical:     { v: 0.10,  min: 0, max: 1,    step: 0.01,   label: 'Radicalisation' },
+  radical:     { v: 0.05,  min: 0, max: 1,    step: 0.01,   label: 'Radicalisation' },
   radicalSize: { v: 20,    min: 1, max: 200,  step: 1,      label: 'Size that radicalises normally' },
   povRef:      { v: 0.90, min: 0.1, max: 8, step: 0.1, label: 'Neglect reference (x mean)' },
   recruitR:    { v: 36,   min: 6,    max: 60,   step: 1,     label: 'Recruitment radius' },
