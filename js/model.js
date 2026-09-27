@@ -1,5 +1,5 @@
 /**
- * Shpilka — cells joined by sticks, competing for energy on a plane.
+ * Compassion — cells joined by sticks, competing for energy on a plane.
  *
  * The rules come from Kudinov's Kosmiki (https://habr.com/ru/articles/153169/): a
  * force-based graph with inertia, cells that repel in proportion to energy, sticks that
@@ -24,10 +24,12 @@ const PHI_INV = 0.618;
 export const P = {
   compassion:  { v: 0.10, min: 0,    max: 1,    step: 0.01,  label: 'Compassion' },
   cSpread:     { v: 0.10, min: 0,    max: 0.4,  step: 0.01,  label: 'Compassion spread' },
-  drain:       { v: 0.35, min: 0,    max: 3,    step: 0.01,  label: 'Drain along sticks' },
-  divide:      { v: 45,   min: 3,    max: 60,   step: 0.5,   label: 'Division threshold' },
-  starve:      { v: 0.08, min: 0.01, max: 2,    step: 0.01,  label: 'Starvation floor' },
+  drain:       { v: 0.60, min: 0,    max: 3,    step: 0.01,  label: 'Drain along sticks' },
+  divide:      { v: 5.0, min: 1.5, max: 30, step: 0.1, label: 'Division threshold (x mean)' },
+  starve:      { v: 0.15, min: 0.01, max: 1, step: 0.01, label: 'Starvation floor (x mean)' },
   influx:      { v: 260,  min: 10,   max: 2000, step: 10,    label: 'Total energy per second' },
+  upkeep:      { v: 0.55, min: 0.02, max: 3,    step: 0.01,  label: 'Upkeep per second' },
+  metabolic:   { v: 0.75, min: 0.5,  max: 1,    step: 0.01,  label: 'Metabolic exponent' },
   repel:       { v: 220,  min: 0,    max: 900,  step: 5,     label: 'Cell repulsion' },
   stick:       { v: 5.2,  min: 0,    max: 20,   step: 0.1,   label: 'Stick stiffness' },
   drag:        { v: 3.4,  min: 0.5,  max: 10,   step: 0.1,   label: 'Drag' },
@@ -38,10 +40,10 @@ export const P = {
   theta:       { v: 0.30, min: 0.02, max: 1,    step: 0.01,  label: 'Destruction threshold' },
   absorbFloor: { v: PHI_INV, min: 0.05, max: 1, step: 0.01, label: 'Absorption floor' },
   surcharge:   { v: 0.35, min: 0,    max: 2,    step: 0.05,  label: 'Destruction surcharge' },
-  lambda:      { v: 0.25, min: 0,    max: 3,    step: 0.01,  label: 'Neglect drift' },
-  povRef:      { v: 0.5,  min: 0.2,  max: 12,   step: 0.1,   label: 'Neglect reference' },
+  lambda:      { v: 0.12, min: 0,    max: 3,    step: 0.01,  label: 'Neglect drift' },
+  povRef:      { v: 0.90, min: 0.1, max: 8, step: 0.1, label: 'Neglect reference (x mean)' },
   recruitR:    { v: 22,   min: 6,    max: 60,   step: 1,     label: 'Recruitment radius' },
-  recruitMin:  { v: 0.35, min: 0.05, max: 12,   step: 0.05,  label: 'Recruitment minimum' },
+  recruitMin:  { v: 0.40, min: 0.05, max: 6, step: 0.05, label: 'Recruitment minimum (x mean)' },
   fanout:      { v: 3.0,  min: 1,    max: 12,   step: 0.5,   label: 'Children per unit size' },
   recruitGap:  { v: 0.45, min: 0.05, max: 1,    step: 0.05,  label: 'Recruitment tolerance' },
   noise:       { v: 0.06, min: 0,    max: 0.3,  step: 0.005, label: 'Alignment noise' },
@@ -62,9 +64,9 @@ export const RULES = [
   { name: 'Recruitment', keys: ['recruitR', 'recruitMin', 'recruitGap', 'fanout'],
     text: () => 'A cell attaches the nearest unattached poorer cell of roughly its own views, up to a fanout that grows with its size. Absorbing in Kosmiki joins the victim on rather than deleting it, and this is the only thing that creates a stick.' },
   { name: 'Division', keys: ['divide', 'mutate'],
-    text: () => 'Past the threshold a cell splits. The child keeps the parent’s views with a small mutation, the energy is halved between them, and the two start joined by a stick. Structures grow rather than being placed.' },
-  { name: 'Income and starvation', keys: ['influx', 'starve'],
-    text: () => 'A fixed total income each second is split equally between every living cell, and a cell that falls below the floor dies. Nothing caps the population: each new cell lowers what all the others receive, so numbers settle where income meets losses.' },
+    text: () => 'Past a multiple of the mean cell size a cell splits. The child keeps the parent’s views with a small mutation, the energy is halved between them, and the two start joined by a stick. Structures grow rather than being placed.' },
+  { name: 'Income, upkeep and starvation', keys: ['influx', 'upkeep', 'metabolic', 'starve'],
+    text: () => 'A fixed total income each second is split equally between every living cell, every cell pays upkeep on what it holds, and one that falls below the floor dies. Upkeep rises more slowly than size, as real metabolism does, so being large is cheaper per unit held \u2014 the economy of scale that lets a drained-from hierarchy run away from the cells feeding it.' },
   { name: 'Enforcement', keys: ['influenceR', 'influenceK', 'influenceC'],
     text: () => 'A cell spends energy to pull the alignment of every neighbour in its radius toward its own, with force rising with its energy and with <code>1 - c</code>: a compassionate cell persuades weakly, a ruthless one coerces. What a cell registers as pressure is that force divided by its own energy: domination is force measured against the ability to resist it, so the same push lands hard on a destitute neighbour and glances off a rich one.' },
   { name: 'Neglect breeds opposition', keys: ['lambda', 'povRef', 'noise'],
@@ -104,6 +106,7 @@ export class Model {
     this.free = new Int32Array(CAP);
     this.freeTop = 0;
     this.rng = mulberry32(0x5bd1e995);
+    this.meanE = 1;
     this.time = 0;
     this.destroyed = 0;
     this.divided = 0;
@@ -116,10 +119,19 @@ export class Model {
       const i = this.spawn(this.rng() * WORLD_W, this.rng() * WORLD_H, 1.0);
       if (i >= 0) this.a[i] = 0.5 + (this.rng() - 0.5) * 0.2;
     }
-    const seedMain = this.spawn(WORLD_W * 0.33, WORLD_H * 0.5, 40);
-    const seedOpp = this.spawn(WORLD_W * 0.70, WORLD_H * 0.5, 18);
-    this.a[seedMain] = 1;
-    this.a[seedOpp] = 0;
+    for (const [fx, align, n] of [[0.33, 1, 70], [0.70, 0, 70]]) {
+      const cx = WORLD_W * fx, cy = WORLD_H * 0.5;
+      const head = this.spawn(cx, cy, 8);
+      this.a[head] = align;
+      for (let k = 0; k < n; k++) {
+        const ang = this.rng() * Math.PI * 2, r = Math.sqrt(this.rng()) * WORLD_W * 0.14;
+        const i = this.spawn(clamp(cx + Math.cos(ang) * r, 2, WORLD_W - 2),
+                             clamp(cy + Math.sin(ang) * r, 2, WORLD_H - 2), 1.5);
+        if (i < 0) break;
+        this.a[i] = clamp(align + (align > 0.5 ? -1 : 1) * this.rng() * 0.25, 0, 1);
+        this.link(i, head);
+      }
+    }
 
     this.applyCompassion();
     this.grid = new Grid(WORLD_W, WORLD_H, Math.max(P.influenceR.v, 24), CAP);
@@ -286,7 +298,7 @@ export class Model {
     for (let i = 0; i < CAP; i++) {
       if (!alive[i]) continue;
       let v = a[i] + dA[i] + gauss(rng) * nz * dt;
-      const poverty = 1 - e[i] / P.povRef.v;
+      const poverty = 1 - e[i] / (P.povRef.v * this.meanE);
       if (poverty > 0) v -= lam * poverty * dt;
       a[i] = clamp(v, 0, 1);
     }
@@ -310,7 +322,7 @@ export class Model {
       if (p >= 0) kids[p]++;
     }
     for (let i = 0; i < CAP; i++) {
-      if (!alive[i] || e[i] < P.recruitMin.v) continue;
+      if (!alive[i] || e[i] < P.recruitMin.v * this.meanE) continue;
       if (kids[i] >= 1 + P.fanout.v * Math.sqrt(e[i])) continue;
       const xi = x[i], yi = y[i], ai = a[i], ceiling = e[i] * 0.9;
       let best = -1, bestD = R2;
@@ -355,7 +367,7 @@ export class Model {
 
   dividePass() {
     const { e, a, x, y, parent, alive, rng } = this;
-    const thr = P.divide.v;
+    const thr = P.divide.v * this.meanE;
     for (let i = 0; i < CAP; i++) {
       if (!alive[i] || e[i] < thr) continue;
       const half = e[i] / 2;
@@ -380,12 +392,15 @@ export class Model {
   incomePass(dt) {
     const { e, alive, rng } = this;
     const share = this.live > 0 ? P.influx.v * dt / this.live : 0;
-    const floor = P.starve.v;
+    const rate = P.upkeep.v * dt, exp = P.metabolic.v;
+    const floor = P.starve.v * this.meanE;
+    let sum = 0;
     for (let i = 0; i < CAP; i++) {
       if (!alive[i]) continue;
-      e[i] += share;
-      if (e[i] < floor) this.kill(i);
+      e[i] += share - Math.min(e[i], rate * Math.pow(e[i], exp));
+      if (e[i] < floor) this.kill(i); else sum += e[i];
     }
+    this.meanE = this.live > 0 ? sum / this.live : 1;
     while (this.live < 2) {
       const i = this.spawn(rng() * WORLD_W, rng() * WORLD_H, 1.0);
       if (i < 0) break;

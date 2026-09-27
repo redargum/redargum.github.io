@@ -15,7 +15,7 @@ const PRESETS = {
   purge:         { compassion: 0.04, lambda: 0.25, theta: 0.28, surcharge: 1.4, influenceK: 0.25 },
 };
 
-const config = new Config('shpilka');
+const config = new Config('compassion');
 const model = new Model();
 const view = new View();
 const debugPanel = initDebugPanel();
@@ -159,8 +159,9 @@ function advanceSweep() {
     model.applyCompassion();
     syncHero();
   }
-  for (let k = 0; k < 30; k++) model.step(1 / SIM_HZ);
-  job.settle += 30;
+  const chunk = Math.max(10, Number(speedInput.value) * 3);
+  for (let k = 0; k < chunk; k++) model.step(1 / SIM_HZ);
+  job.settle += chunk;
   if (job.settle < 150) return;
 
   const r = runElection(model, { enforcement: true, quotas: false, seed: 99 });
@@ -208,6 +209,11 @@ function fmt(v) {
   return Math.abs(v) >= 100 ? v.toFixed(0) : Math.abs(v) >= 1 ? v.toFixed(2) : v.toFixed(3);
 }
 
+const speedInput = document.getElementById('p-speed');
+const speedLabel = document.getElementById('v-speed');
+speedInput.oninput = () => { speedLabel.textContent = `${speedInput.value}\u00d7`; };
+speedInput.oninput();
+
 let acc = 0, last = performance.now(), netDue = 0;
 function frame(now) {
   const dt = Math.min(0.1, (now - last) / 1000);
@@ -217,10 +223,11 @@ function frame(now) {
   if (sweepJob) { advanceSweep(); view.drawNetwork(model); return; }
   if (paused) return;
 
-  acc += dt;
+  acc += dt * Number(speedInput.value);
   const stepDt = 1 / SIM_HZ;
   let steps = 0;
-  while (acc >= stepDt && steps < 3) { model.step(stepDt); acc -= stepDt; steps++; }
+  const budget = Math.max(1, Math.min(90, Math.round(dt * SIM_HZ * Number(speedInput.value)) + 1));
+  while (acc >= stepDt && steps < budget) { model.step(stepDt); acc -= stepDt; steps++; }
   if (steps === 0) return;
   acc = Math.min(acc, stepDt);
 

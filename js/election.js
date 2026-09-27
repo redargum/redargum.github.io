@@ -15,7 +15,7 @@ export const EP = {
   temp:        { v: 0.16, min: 0.02, max: 0.8,  step: 0.01,  label: 'Preference sharpness' },
   beta:        { v: 0.45, min: 0,    max: 1,    step: 0.01,  label: 'Mobilization by enforcement' },
   beta2:       { v: 0.80, min: 0,    max: 1,    step: 0.01,  label: 'Inflation by enforcement' },
-  enfRef:      { v: 90,   min: 1,    max: 400,  step: 1,     label: 'Enforcement reference' },
+  enfRef:      { v: 4.0,  min: 0.1,  max: 40,   step: 0.1,   label: 'Enforcement reference (x mean)' },
   roundFrom:   { v: 0.45, min: 0,    max: 1,    step: 0.01,  label: 'Quota threshold' },
 };
 
@@ -25,7 +25,7 @@ export const ELECTION_RULES = [
   { name: 'Reported share', keys: ['temp', 'beta2'],
     text: () => 'The honest share is a logistic of the station’s alignment above the midpoint. Enforcement pushes it the rest of the way toward 1, so the reported result parts company with the preference underneath it.' },
   { name: 'Enforcement reference', keys: ['enfRef'],
-    text: () => 'Received enforcement is divided by this fixed amount and capped at 1, so the pressure term is an absolute fraction. It has to be fixed rather than a percentile of the population: scaling against the population would cancel the very change in pressure the sweep is there to show.' },
+    text: () => 'Received enforcement is divided by this multiple of the mean cell size and capped at 1. Mean size only fixes the units; measuring against the spread of enforcement itself would cancel the very change in pressure the sweep exists to show.' },
   { name: 'Quotas', keys: ['roundFrom'],
     text: () => 'Off by default. Above the threshold a station is working to a target, so its share snaps to the nearest 5%. This is what produces the comb of spikes at 70, 75 and 80% in real returns; it is left off so the tail cannot be blamed on the rounding.' },
 ];
@@ -36,7 +36,7 @@ export const ELECTION_RULES = [
  */
 export function runElection(model, { enforcement = true, quotas = false, seed = 1 } = {}) {
   const rng = mulberry32(seed);
-  const ref = EP.enfRef.v;
+  const ref = EP.enfRef.v * Math.max(1e-6, model.meanE);
   const main = new Float64Array(BINS);
   const opp = new Float64Array(BINS);
   const scatter = new Float32Array(2 * 4000);

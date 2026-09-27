@@ -1,5 +1,5 @@
-Build "Shpilka", a simulation of how an authoritarian hierarchy leaves a tail in election
-returns, published at `https://redargum.github.io`.
+Build "Compassion", a simulation of how an authoritarian hierarchy leaves a tail in election
+returns, published at `https://redargum.github.io/compassion.html`.
 
 ## What it argues
 
@@ -17,14 +17,13 @@ coerce and destroy; drive it down and the cascade steepens until the tail appear
 and the same code produces a normal distribution. The sketch exists to make that sweep
 visible.
 
-The name is for Sergey Shpilkin, who reads Russian election returns this way. Shpilka is also
-a hairpin and a barbed remark.
+The Shpilkin panel is named for Sergey Shpilkin, who reads Russian election returns this way.
 
 ## Repository and publication
 
 `redargum/redargum.github.io` is cloned at `~/repos/redargum`, one commit `8bcc802`, branch
 `master`. Pages serves that branch from the repository root, which is how the old site was
-reachable at `https://redargum.github.io`; do not rename the branch or move the source, or
+reachable at `https://redargum.github.io/compassion.html`; do not rename the branch or move the source, or
 publication breaks. Delete the abandoned Angular build that is there now (`*.bundle.js`,
 `*.map`, `index.html`).
 
@@ -48,7 +47,7 @@ js/debug.js         copy of ~/repos/game/cnspr.github.io/js/debug.js
 No gallery index and no `common/` directory. A gallery of one is scaffolding; add both when a
 second sketch exists.
 
-`config.js` hardcodes `KEY: 'conspiracy_config'`. Change it to `shpilka`.
+`config.js` hardcodes `KEY: 'conspiracy_config'`. Change it to `compassion`.
 
 ## Model
 
@@ -193,5 +192,5 @@ drop anything that does not serve it.
 ## Constraints
 
 Comments at most one line, and only where the code cannot say it. No framework. Verify by
-loading `https://redargum.github.io` after the push and comparing the two curves, not by
+loading `https://redargum.github.io/compassion.html` after the push and comparing the two curves, not by
 unit-testing the integrator.
