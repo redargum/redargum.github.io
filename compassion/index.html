@@ -643,6 +643,9 @@ function initDebugPanel() {
 /** Steps advanced per frame. Fixed: the field is only legible at one rate. */
 const STEPS_PER_FRAME = 1;
 
+/** How often the returns and the table are re-read, in milliseconds. */
+const PANEL_MS = 1000;
+
 /** Bump whenever a parameter's meaning or range changes, so stored values cannot outlive it. */
 const SCHEMA = 2;
 
@@ -814,7 +817,7 @@ function fmt(v) {
   return Math.abs(v) >= 100 ? v.toFixed(0) : Math.abs(v) >= 1 ? v.toFixed(2) : v.toFixed(3);
 }
 
-let last = performance.now(), frameNo = 0;
+let last = performance.now(), frameNo = 0, lastPanels = 0;
 function frame(now) {
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
@@ -839,7 +842,12 @@ function frame(now) {
 
   if (drawing) view.drawNetwork(model);
 
-  if (drawing) { hold(); renderStats(); }
+  // The returns are re-read once a second; at frame rate the numbers move too fast to read.
+  if (now - lastPanels >= PANEL_MS) {
+    lastPanels = now;
+    hold();
+    renderStats();
+  }
 }
 requestAnimationFrame(frame);
 
