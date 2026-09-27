@@ -774,7 +774,8 @@ export const ELECTION_RULES = [
 
 /**
  * @returns {{main:Float64Array, opp:Float64Array, scatter:Float32Array, points:number,
- *   totalVotes:number, mainShare:number, blocShare:number, stations:number, captured:number}}
+ *   totalVotes:number, mainShare:number, blocShare:number, stations:number, captured:number,
+ *   incumbentIsRed:boolean, redShare:number, turnout:number}}
  */
 export function runElection(model, { loyalty = true, seed = 1 } = {}) {
   const red = new Float64Array(BINS);
@@ -828,6 +829,8 @@ export function runElection(model, { loyalty = true, seed = 1 } = {}) {
   return {
     main, opp, scatter, points, stations, totalVotes, captured,
     incumbentIsRed: redLeads,
+    redShare: totalVotes > 0 ? redVotes / totalVotes : 0,
+    turnout: stations > 0 ? totalVotes / stations : 0,
     mainShare: totalVotes > 0 ? incumbentVotes / totalVotes : 0,
     blocShare: blocVote(main, opp, totalVotes),
   };

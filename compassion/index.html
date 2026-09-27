@@ -746,22 +746,37 @@ function hold() {
 
 function renderStats() {
   const s = model.stats();
-  document.getElementById('stats').innerHTML = [
-    ['Stations', result ? result.stations : 0],
-    ['Incumbent', result ? (result.incumbentIsRed ? 'red' : 'blue') : '—'],
-    ['Incumbent by preference', result
-      ? `${(100 * (result.incumbentIsRed ? s.red : s.blue) / Math.max(1, s.live)).toFixed(0)}%`
-      : '—'],
-    ['Incumbent reported', result ? `${(result.mainShare * 100).toFixed(1)}%` : '—'],
-    ['Bloc vote', result ? `${(result.blocShare * 100).toFixed(1)}%` : '—'],
-    ['Captured cells', result ? `${(100 * result.captured / Math.max(1, result.stations)).toFixed(0)}%` : '—'],
-    ['Largest cell', s.eMax.toFixed(0)],
-    ['Destroyed', s.destroyed],
-    ['Divided', s.divided],
-    ['Sim steps / s', rate.stepsPerSec],
-    ['Frames drawn / s', Math.round(rate.fps / Number(drawInput.value))],
-  ].map(([k, v]) => `<div class="stat"><span>${k}</span><span>${v}</span></div>`).join('');
+  const pct = v => `${(100 * v).toFixed(1)}%`;
+  const swatch = isRed => `<i style="display:inline-block;width:7px;height:7px;margin-right:5px;`
+    + `background:var(${isRed ? '--main' : '--opp'})"></i>`;
+
+  const result_ = result;
+  const red = result_ ? result_.redShare : 0;
+  const rows = result_ ? [
+    ['Turnout', pct(result_.turnout)],
+    [swatch(true) + 'Red', pct(red)],
+    [swatch(false) + 'Blue', pct(1 - red)],
+    ['Winner', `${swatch(red >= 0.5)}${red >= 0.5 ? 'red' : 'blue'} by ${pct(Math.abs(2 * red - 1))}`],
+    ['&nbsp;', ''],
+    ['Winner by preference',
+      pct((result_.incumbentIsRed ? s.red : s.blue) / Math.max(1, s.live))],
+    ['Bloc vote', pct(result_.blocShare)],
+    ['Captured cells', pct(result_.captured / Math.max(1, result_.stations))],
+    ['Stations', result_.stations],
+  ] : [['Stations', 0]];
+
+  document.getElementById('stats').innerHTML = rows
+    .concat([
+      ['&nbsp;', ''],
+      ['Largest cell', s.eMax.toFixed(0)],
+      ['Destroyed', s.destroyed],
+      ['Divided', s.divided],
+      ['Sim steps / s', rate.stepsPerSec],
+      ['Frames drawn / s', Math.round(rate.fps / Number(drawInput.value))],
+    ])
+    .map(([k, v]) => `<div class="stat"><span>${k}</span><span>${v}</span></div>`).join('');
 }
+
 
 function persist() {
   const out = { schema: SCHEMA, model: {}, election: {} };
