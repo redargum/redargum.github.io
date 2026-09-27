@@ -112,7 +112,7 @@ const PHI_INV = 0.618;
 
 /** Every tunable the model reads. `rules.js` renders the panel from this object. */
 export const P = {
-  compassion:  { v: 0.80, min: 0,    max: 1,    step: 0.01,  label: 'Compassion' },
+  compassion:  { v: 0.50, min: 0,    max: 1,    step: 0.01,  label: 'Compassion' },
   drain:       { v: 1.0, min: 0, max: 1, step: 0.01, label: 'Share the stick carries' },
   divide:      { v: 5.0, min: 1.5, max: 30, step: 0.1, label: 'Division threshold (x mean)' },
   starve:      { v: 0.06, min: 0.01, max: 3, step: 0.01, label: 'Starvation floor' },
