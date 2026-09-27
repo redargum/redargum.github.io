@@ -410,7 +410,9 @@ class View {
     ctx.fillText('votes', 0, 0);
     ctx.restore();
 
-    this.legend(ctx, pad.l + iw - 148, pad.t + 12, [[inc, 'incumbent'], [chl, 'challenger']]);
+    const placed = [];
+    this.label(ctx, result.main, inc, 'incumbent', pad, iw, ih, max, placed);
+    this.label(ctx, result.opp, chl, 'challenger', pad, iw, ih, max, placed);
   }
 
   drawScatter(result) {
@@ -441,17 +443,21 @@ class View {
   }
 
 
-  legend(ctx, x, y, items) {
-    ctx.font = '10px system-ui';
-    ctx.textAlign = 'left';
-    let cx = x;
-    for (const [color, label] of items) {
-      ctx.fillStyle = color;
-      ctx.fillRect(cx, y - 4, 7, 7);
-      ctx.fillStyle = this.textMuted;
-      ctx.fillText(label, cx + 11, y + 2);
-      cx += 18 + ctx.measureText(label).width;
-    }
+  /** Write a curve's name at its own peak, so no key has to be carried in the head. */
+  label(ctx, arr, color, text, pad, iw, ih, max, placed) {
+    let peak = 0;
+    for (let b = 1; b < BINS; b++) if (arr[b] > arr[peak]) peak = b;
+    if (arr[peak] <= 0) return;
+    const px = pad.l + (peak + 0.5) / BINS * iw;
+    const py = pad.t + ih - (arr[peak] / max) * ih;
+    ctx.font = '11px system-ui';
+    ctx.textAlign = px > pad.l + iw * 0.7 ? 'right' : 'left';
+    let ly = Math.max(pad.t + 10, py - 6);
+    // Both curves often peak in the same bin, and their heights alone will not separate the words
+    while (placed.some(q => Math.abs(q.x - px) < 60 && Math.abs(q.y - ly) < 13)) ly += 13;
+    placed.push({ x: px, y: ly });
+    ctx.fillStyle = color;
+    ctx.fillText(text, px + (ctx.textAlign === 'right' ? -6 : 6), ly);
   }
 }
 
