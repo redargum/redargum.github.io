@@ -135,7 +135,7 @@ export const P = {
   conform:     { v: 0.030, min: 0, max: 0.3,  step: 0.001,  label: 'Conformity to the patron' },
   lambda:      { v: 0.004, min: 0, max: 0.05, step: 0.0005, label: 'Neglect drift' },
   defect:      { v: 0.006, min: 0, max: 0.05, step: 0.0005, label: 'Drift of the unattached' },
-  radical:     { v: 1.0,  min: 0, max: 1,    step: 0.01,   label: 'Radicalisation' },
+  radical:     { v: 0.10,  min: 0, max: 1,    step: 0.01,   label: 'Radicalisation' },
   povRef:      { v: 0.90, min: 0.1, max: 8, step: 0.1, label: 'Neglect reference (x mean)' },
   recruitR:    { v: 36,   min: 6,    max: 60,   step: 1,     label: 'Recruitment radius' },
   recruitMin:  { v: 0.40, min: 0.05, max: 6, step: 0.05, label: 'Recruitment minimum (x mean)' },
