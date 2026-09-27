@@ -2,6 +2,11 @@
  * The simulation, with no reference to the page: the torus grid, the cells and sticks that
  * live on it, and the election read off them. Nothing here touches the DOM, so it runs under
  * node as readily as in the browser.
+ *
+ * This variant carries no persuasion through space. Nobody broadcasts and neighbours do not
+ * talk. What a cell holds comes along the stick above it, from being neglected by whoever
+ * holds that stick, or from answering to nobody at all, so the returns are the shape of the
+ * hierarchy and nothing else.
  */
 
 // ============================================================================
@@ -123,15 +128,15 @@ export const P = {
   stick:       { v: 0.006, min: 0, max: 0.05, step: 0.0005, label: 'Stick stiffness' },
   drag:        { v: 0.11, min: 0.01, max: 0.6, step: 0.01, label: 'Drag' },
   hunt:        { v: 0.10, min: 0, max: 1, step: 0.01, label: 'Hunt / flee force' },
-  influenceR:  { v: 30,   min: 10,   max: 70,   step: 1,     label: 'Enforcement radius' },
-  influenceK:  { v: 0.040, min: 0, max: 0.3, step: 0.001, label: 'Media strength' },
-  influenceC:  { v: 0.0001, min: 0, max: 0.01, step: 0.0001, label: 'Media cost' },
+  reach:       { v: 30,   min: 10,   max: 70,   step: 1,     label: 'Interaction radius' },
   theta:       { v: 0.30, min: 0.02, max: 1,    step: 0.01,  label: 'Destruction threshold' },
   absorbFloor: { v: PHI_INV, min: 0.05, max: 1, step: 0.01, label: 'Absorption floor' },
   surcharge:   { v: 0.35, min: 0,    max: 2,    step: 0.05,  label: 'Destruction surcharge' },
   conform:     { v: 0.030, min: 0, max: 0.3,  step: 0.001,  label: 'Conformity to the patron' },
   lambda:      { v: 0.004, min: 0, max: 0.05, step: 0.0005, label: 'Neglect drift' },
   defect:      { v: 0.006, min: 0, max: 0.05, step: 0.0005, label: 'Drift of the unattached' },
+  radical:     { v: 0.10,  min: 0, max: 1,    step: 0.01,   label: 'Radicalisation' },
+  radicalSize: { v: 20,    min: 1, max: 200,  step: 1,      label: 'Size that radicalises normally' },
   povRef:      { v: 0.90, min: 0.1, max: 8, step: 0.1, label: 'Neglect reference (x mean)' },
   recruitR:    { v: 36,   min: 6,    max: 60,   step: 1,     label: 'Recruitment radius' },
   recruitMin:  { v: 0.40, min: 0.05, max: 6, step: 0.05, label: 'Recruitment minimum (x mean)' },
@@ -141,11 +146,6 @@ export const P = {
   casualties:  { v: 0.30, min: 0,    max: 1,    step: 0.05,  label: 'Casualties taking a rival' },
   surveyEvery: { v: 20,   min: 5,    max: 120,  step: 5,     label: 'Steps between surveys' },
   breakFree:   { v: 2.50, min: 1,    max: 4,    step: 0.05,  label: 'Break-free ratio' },
-  tolerance:   { v: 0.35, min: 0.02, max: 1,    step: 0.01,  label: 'Confidence bound' },
-  backfire:    { v: 0.55, min: 0,    max: 2,    step: 0.05,  label: 'Backfire' },
-  mediaTop:    { v: 14,   min: 0,    max: 60,   step: 1,     label: 'Broadcasters' },
-  mediaR:      { v: 130,  min: 20,   max: 400,  step: 5,     label: 'Broadcast reach' },
-  mediaK:      { v: 0.022,min: 0,    max: 0.2,  step: 0.001, label: 'Broadcast strength' },
   recruitGap:  { v: 0.45, min: 0.05, max: 1,    step: 0.05,  label: 'Recruitment tolerance' },
 };
 
@@ -169,16 +169,12 @@ export const RULES = [
     text: () => 'Past a multiple of the mean cell size a cell splits. The child keeps the parent’s views exactly, the energy is halved between them, and the two start joined by a stick. Structures grow rather than being placed.' },
   { name: 'Land, upkeep and starvation', keys: ['land', 'upkeep', 'metabolic', 'starve'],
     text: () => 'Every square of the field yields the same income, split between whoever is standing in it, so a cell alone on its square takes all of it and ten crowded together take a tenth each. Ground is therefore worth holding and worth spreading over, and a structure that packs itself into one corner starves. Each cell then pays upkeep on what it holds, and one that cannot hold the floor dies. The floor is a plain amount: tied to the mean it made a few rich isolated cells raise the bar that killed every crowded one, and tied to what a solitary cell sustains it moved faster than the income it was meant to track. Upkeep rises more slowly than size, as real metabolism does, so being large is cheaper per unit held \u2014 the economy of scale that lets a drained-from hierarchy run away from the cells feeding it.' },
-  { name: 'Bounded confidence', keys: ['tolerance', 'backfire'],
-    text: () => 'A cell is moved toward a view within the bound of its own and pushed away from one beyond it. This is what makes the field polarize: every other force here averages, and averaging can only converge, so without a repelled range every opinion collapses into one.' },
-  { name: 'Mass media', keys: ['mediaTop', 'mediaR', 'mediaK'],
-    text: () => 'The largest cells broadcast their alignment across a radius far beyond their own neighbourhood. Few transmitters with wide reach is what separates propaganda from conformity, and it is what makes holding the apparatus worth having: the pull is toward the broadcaster, not toward the local average.' },
-  { name: 'Word of mouth', keys: ['influenceR', 'influenceK', 'influenceC'],
-    text: () => 'A cell spends energy to pull the alignment of every neighbour in its radius toward its own, with force rising with its energy and with <code>1 - c</code>: a compassionate cell persuades weakly, a ruthless one coerces. What a cell registers as pressure is that force divided by its own energy: domination is force measured against the ability to resist it, so the same push lands hard on a destitute neighbour and glances off a rich one.' },
   { name: 'Falling in line', keys: ['conform'],
     text: () => 'A cell holding a stick takes on the view of the cell above it. A structure therefore comes to think one thing, and a structure taken from a rival converts to its new owner rather than keeping the loyalty it was captured with.' },
+  { name: 'Hardening', keys: ['radical', 'compassion', 'radicalSize'],
+    text: () => 'Every cell moves toward the pole it is already nearer, at a rate set by <code>1 - c</code> and multiplied by two things that harden anyone: holding less than the average, and belonging to a structure smaller than the reference. A destitute cell in a marginal faction hardens several times faster than a comfortable one in a large one. A field that takes everything from its weakest leaves nobody undecided; one that supports them leaves nobody with much to be sure about. Turnout rises with conviction, so hardening is also what brings a structure to the polls.' },
   { name: 'The unattached', keys: ['defect'],
-    text: () => 'A cell answering to nobody drifts toward whichever side is out of power. Nothing organises it and nothing feeds it, so it opposes whoever holds the apparatus \u2014 and since the side it drifts to is set by who is ahead, growing large enough to govern turns that supply off and points it at you instead.' },
+    text: () => 'A cell with neither a patron nor a follower drifts toward whichever side is out of power. Nothing organises it and nothing feeds it, so it opposes whoever holds the apparatus \u2014 and since the side it drifts to is set by who is ahead, growing large enough to govern turns that supply off and points it at you instead.' },
   { name: 'Neglect breeds dissent', keys: ['lambda', 'povRef'],
     text: () => 'A cell near the starvation floor turns against the side its own patron belongs to, pulling against the conformity above. Because energy runs uphill the periphery is always the poorest, so it defects without anyone deciding it should \u2014 and because it defects from whoever rules it rather than toward a fixed side, neither side is a trap the other can never escape.' },
   { name: 'Destruction', keys: ['theta', 'surcharge', 'absorbFloor'],
@@ -189,8 +185,8 @@ export const RULES = [
     text: () => 'Reaching a rival head with a heavier cell takes the whole structure under it: the head is re-parented and its members come with it. Within one side that is all that happens, and a faction changes hands intact. Across the divide a share of the members do not survive it, and the victor pays for each.' },
   { name: 'Hunting', keys: ['hunt'],
     text: () => 'A cell accelerates toward opponents it could destroy and away from opponents that could destroy it. Fronts and territories come out of this, not out of any map.' },
-  { name: 'Repression is not free', keys: ['surcharge', 'influenceC'],
-    text: () => 'Destroying costs more than the victim held, and that energy is then not available for enforcement. Nothing forces the trade-off; it falls out of the two costs.' },
+  { name: 'Repression is not free', keys: ['surcharge'],
+    text: () => 'Destroying costs more than the victim held. With nothing to spend energy on but growing, a faction that purges heavily divides less and stays smaller than one that does not, and nothing in the rules forces that trade: it falls out of the cost.' },
 ];
 
 export class Model {
@@ -207,12 +203,11 @@ export class Model {
     this.pgen = new Int32Array(CAP);
     this.gen = new Int32Array(CAP);
     this.alive = new Uint8Array(CAP);
-    this.dA = new Float32Array(CAP);
     this.kids = new Int32Array(CAP);
     this.flow = new Float32Array(CAP);
-    this.top = new Int32Array(64);
     this.head = new Int32Array(CAP).fill(-1);
     this.strength = new Float32Array(CAP);
+    this.members = new Int32Array(CAP);
     this.target = new Int32Array(CAP).fill(-1);
     this.surveyDue = 0;
     this.challengerPole = 0;
@@ -248,7 +243,7 @@ export class Model {
       }
     }
 
-    this.grid = new Grid(WORLD_W, WORLD_H, Math.max(P.influenceR.v, 24), CAP);
+    this.grid = new Grid(WORLD_W, WORLD_H, Math.max(P.reach.v, 24), CAP);
   }
 
   /**
@@ -298,7 +293,7 @@ export class Model {
 
   step() {
     this.time += 1;
-    const cell = Math.max(P.influenceR.v, 24);
+    const cell = Math.max(P.reach.v, 24);
     if (this.grid.cell !== cell) this.grid = new Grid(WORLD_W, WORLD_H, cell, CAP);
     this.grid.rebuild(this.x, this.y, this.alive, CAP);
 
@@ -307,8 +302,6 @@ export class Model {
     this.campaignPass();
     this.breakFreePass();
     this.drainPass();
-    this.influencePass();
-    this.broadcastPass();
     this.alignPass();
     this.recruitPass();
     this.destroyPass();
@@ -319,7 +312,7 @@ export class Model {
   /** Repulsion, stick tension, hunting and drag, integrated with inertia. */
   forcePass() {
     const { x, y, vx, vy, e, a, parent, alive } = this;
-    const R = P.influenceR.v, R2 = R * R;
+    const R = P.reach.v, R2 = R * R;
     const krep = P.repel.v, kstick = P.stick.v, khunt = P.hunt.v;
 
     for (let i = 0; i < CAP; i++) {
@@ -366,13 +359,15 @@ export class Model {
     let redCells = 0, blueCells = 0;
     for (let i = 0; i < CAP; i++) if (this.alive[i]) (this.a[i] > 0.5 ? redCells++ : blueCells++);
     this.challengerPole = redCells > blueCells ? 0 : 1;
-    const { head, strength, target, alive, e, a } = this;
+    const { head, strength, members, target, alive, e, a } = this;
     strength.fill(0);
+    members.fill(0);
     for (let i = 0; i < CAP; i++) {
       if (!alive[i]) { head[i] = -1; continue; }
       const h = this.headOf(i);
       head[i] = h;
       strength[h] += e[i];
+      members[h]++;
     }
     // Each structure picks the nearest rival it outweighs, and notes the nearest that outweighs it.
     target.fill(-1);
@@ -473,88 +468,29 @@ export class Model {
       if (alive[i]) e[i] = Math.max(0, e[i] + flow[i]);
     }
   }
-
-  influencePass() {
-    const ROUGHNESS = 1 - clamp(P.compassion.v, 0.01, 0.985);
-
-    const { x, y, a, e, c, alive, dA } = this;
-    dA.fill(0);
-    const R = P.influenceR.v, R2 = R * R, k = P.influenceK.v;
-    for (let i = 0; i < CAP; i++) {
-      if (!alive[i]) continue;
-      const infl = ROUGHNESS * e[i];
-      if (infl < 0.05) continue;
-      const xi = x[i], yi = y[i], ai = a[i];
-      let spent = 0;
-      this.grid.forEachNear(xi, yi, j => {
-        if (j === i || !alive[j]) return;
-        const ddx = dx(xi, x[j]), ddy = dy(yi, y[j]);
-        const d2 = ddx * ddx + ddy * ddy;
-        if (d2 > R2) return;
-        const w = 1 - d2 / R2;
-        dA[j] += k * infl * w * persuade(ai, a[j]);
-        spent += w;
-      });
-      e[i] = Math.max(0, e[i] - P.influenceC.v * infl * spent);
-    }
-  }
-
-  /**
-   * Mass media: the largest cells project alignment far beyond their own neighbourhood, while
-   * the local term reaches only as far as a cell can see. Few transmitters with wide reach is
-   * what makes this propaganda rather than conformity, and it is why holding the apparatus is
-   * worth anything — the pull is toward the broadcaster, not toward the local average.
-   */
-  broadcastPass() {
-    const ROUGHNESS = 1 - clamp(P.compassion.v, 0.01, 0.985);
-
-    const { x, y, a, e, c, alive, dA, top } = this;
-    const k = Math.min(P.mediaTop.v | 0, top.length);
-    if (k === 0) return;
-
-    let n = 0;
-    for (let i = 0; i < CAP; i++) {
-      if (!alive[i]) continue;
-      if (n < k) {
-        top[n++] = i;
-        if (n === k) sortTop(top, e, n);
-      } else if (e[i] > e[top[k - 1]]) {
-        top[k - 1] = i;
-        sortTop(top, e, k);
-      }
-    }
-    if (n === 0) return;
-
-    const R = P.mediaR.v, R2 = R * R, strength = P.mediaK.v, mean = Math.max(1e-6, this.meanE);
-    for (let t = 0; t < n; t++) {
-      const i = top[t];
-      if (!alive[i]) continue;
-      const reach = ROUGHNESS * (e[i] / mean);
-      if (reach < 0.05) continue;
-      const xi = x[i], yi = y[i], ai = a[i];
-      for (let j = 0; j < CAP; j++) {
-        if (!alive[j] || j === i) continue;
-        const ddx = dx(xi, x[j]), ddy = dy(yi, y[j]);
-        const d2 = ddx * ddx + ddy * ddy;
-        if (d2 > R2) continue;
-        const w = 1 - d2 / R2;
-        dA[j] += strength * reach * w * persuade(ai, a[j]);
-      }
-    }
-  }
-
   alignPass() {
-    const { a, e, alive, dA } = this;
+    const { a, e, alive, kids, head, members } = this;
     const lam = P.lambda.v;
+    // Relaxation toward the nearer pole: at compassion 0 a cell arrives in one step, at 1 it
+    // does not move. A cell exactly at the midpoint has no nearer pole and is left undecided.
+    const hardening = P.radical.v * (1 - clamp(P.compassion.v, 0, 1));
+    const meanE = Math.max(1e-6, this.meanE), refSize = Math.max(1, P.radicalSize.v);
     for (let i = 0; i < CAP; i++) {
       if (!alive[i]) continue;
-      let v = a[i] + dA[i];
+      // Destitution and marginality both harden: each multiplier is 1 for a cell of average
+      // energy in a structure of the reference size, so the rate above keeps its meaning.
+      const poor = clamp(meanE / Math.max(1e-6, e[i]), 0, 4);
+      const h = head[i];
+      const small = clamp(refSize / Math.max(1, h >= 0 ? members[h] : 1), 0, 4);
+      let v = a[i] + (a[i] === 0.5 ? 0 : hardening * poor * small * ((a[i] > 0.5 ? 1 : 0) - a[i]));
       const patron = this.parentOf(i);
       if (patron >= 0) {
         v += P.conform.v * (a[patron] - a[i]);
         const poverty = 1 - e[i] / (P.povRef.v * this.meanE);
         if (poverty > 0) v += lam * poverty * (a[patron] > 0.5 ? -1 : 1);
-      } else {
+      } else if (kids[i] === 0) {
+        // Only a cell with neither a patron nor a follower is a free agent. A head has no
+        // patron either, and giving it this rule had every leader drifting to oppose itself.
         v += P.defect.v * (this.challengerPole - a[i]);
       }
       a[i] = clamp(v, 0, 1);
@@ -601,7 +537,7 @@ export class Model {
     const ROUGHNESS = 1 - clamp(P.compassion.v, 0.01, 0.985);
 
     const { x, y, a, e, c, alive } = this;
-    const R = P.influenceR.v * 0.55, R2 = R * R;
+    const R = P.reach.v * 0.55, R2 = R * R;
     for (let i = 0; i < CAP; i++) {
       if (!alive[i]) continue;
       const gap = P.theta.v / ROUGHNESS;
@@ -704,28 +640,6 @@ export class Model {
     };
   }
 }
-
-function sortTop(top, e, n) {
-  for (let a = 1; a < n; a++) {
-    const v = top[a], ev = e[v];
-    let b = a - 1;
-    while (b >= 0 && e[top[b]] < ev) { top[b + 1] = top[b]; b--; }
-    top[b + 1] = v;
-  }
-}
-
-/**
- * Bounded confidence: a cell is moved toward a view close enough to its own and pushed away
- * from one too far off. Every force here used to be an averaging force, and averaging can
- * only ever converge — without a repelled range the whole field collapses onto one opinion.
- */
-function persuade(from, to) {
-  const gap = from - to;
-  const t = P.tolerance.v;
-  if (Math.abs(gap) <= t) return gap;
-  return -Math.sign(gap) * P.backfire.v * (Math.abs(gap) - t);
-}
-
 export function radius(energy) { return 0.9 + Math.sqrt(Math.max(0, energy)) * 0.9; }
 export function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
 
