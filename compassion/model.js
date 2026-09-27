@@ -679,16 +679,16 @@ export class Model {
   }
 
   stats() {
-    let main = 0, opp = 0, eSum = 0, cSum = 0, eMax = 0, head = -1;
+    let red = 0, blue = 0, eSum = 0, cSum = 0, eMax = 0, head = -1;
     for (let i = 0; i < CAP; i++) {
       if (!this.alive[i]) continue;
       eSum += this.e[i];
       cSum += this.c[i];
-      if (this.a[i] > 0.5) main++; else opp++;
+      if (this.a[i] > 0.5) red++; else blue++;
       if (this.e[i] > eMax) { eMax = this.e[i]; head = i; }
     }
     return {
-      live: this.live, main, opp, eSum, eMax, head,
+      live: this.live, red, blue, eSum, eMax, head,
       compassion: cSum / Math.max(1, this.live),
       destroyed: this.destroyed, divided: this.divided, conquered: this.conquered,
     };
@@ -735,6 +735,10 @@ export function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
  * A landscape of big hierarchies therefore delivers near-unanimous blocks at high turnout,
  * while free cells produce a normal core — which is the whole of the Shpilkin picture.
  *
+ * Neither colour is the incumbent by definition. Whichever side is ahead when the votes are
+ * counted holds that standing, and the other is the challenger whose curve supplies the
+ * baseline; a challenger that overtakes the incumbent takes the title with the majority.
+ *
  * Nothing here is drawn from a distribution. Every quantity follows from the state of the
  * field, so any shape the returns take was produced by the model rather than put in by hand.
  */
@@ -767,10 +771,10 @@ export const ELECTION_RULES = [
  *   totalVotes:number, mainShare:number, blocShare:number, stations:number, captured:number}}
  */
 export function runElection(model, { loyalty = true, seed = 1 } = {}) {
-  const main = new Float64Array(BINS);
-  const opp = new Float64Array(BINS);
+  const red = new Float64Array(BINS);
+  const blue = new Float64Array(BINS);
   const scatter = new Float32Array(2 * 4000);
-  let points = 0, totalMain = 0, totalVotes = 0, stations = 0, captured = 0;
+  let points = 0, redVotes = 0, totalVotes = 0, stations = 0, captured = 0;
 
   const { apathy, convinced, temp, mobilise } = EP;
   const loyaltyK = loyalty ? EP.loyalty.v : 0;
@@ -795,9 +799,9 @@ export function runElection(model, { loyalty = true, seed = 1 } = {}) {
     const turnout = clamp(willing + mobilise.v * grip * (1 - willing), 0.01, 1);
     const votes = model.voters[i] * turnout;
     const bin = Math.min(BINS - 1, (turnout * BINS) | 0);
-    main[bin] += votes * share;
-    opp[bin] += votes * (1 - share);
-    totalMain += votes * share;
+    red[bin] += votes * share;
+    blue[bin] += votes * (1 - share);
+    redVotes += votes * share;
     totalVotes += votes;
 
     if (seen++ % stride === 0 && points < 4000) {
@@ -807,9 +811,18 @@ export function runElection(model, { loyalty = true, seed = 1 } = {}) {
     }
   }
 
+  // Incumbency is a standing, not a colour: whichever side is ahead holds it, and the other
+  // supplies the baseline Shpilkin's method compares against.
+  const redLeads = redVotes * 2 >= totalVotes;
+  const main = redLeads ? red : blue;
+  const opp = redLeads ? blue : red;
+  const incumbentVotes = redLeads ? redVotes : totalVotes - redVotes;
+  if (!redLeads) for (let k = 0; k < points; k++) scatter[2 * k + 1] = 1 - scatter[2 * k + 1];
+
   return {
     main, opp, scatter, points, stations, totalVotes, captured,
-    mainShare: totalVotes > 0 ? totalMain / totalVotes : 0,
+    incumbentIsRed: redLeads,
+    mainShare: totalVotes > 0 ? incumbentVotes / totalVotes : 0,
     blocShare: blocVote(main, opp, totalVotes),
   };
 }
