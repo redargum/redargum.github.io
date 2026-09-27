@@ -42,16 +42,22 @@ export class Grid {
     }
   }
 
-  /** Call fn(j) for every live node in the 3x3 cell block around (x, y). */
+  /**
+   * Call fn(j) for every live node in the 3x3 cell block around (x, y), wrapping at the
+   * edges: the field is a torus, so the block around a border cell continues on the far side.
+   */
   forEachNear(x, y, fn) {
     const cx = Math.min(this.cols - 1, Math.max(0, (x / this.cell) | 0));
     const cy = Math.min(this.rows - 1, Math.max(0, (y / this.cell) | 0));
-    const { counts, items } = this;
-    for (let gy = Math.max(0, cy - 1); gy <= Math.min(this.rows - 1, cy + 1); gy++) {
-      const base = gy * this.cols;
-      const lo = counts[base + Math.max(0, cx - 1)];
-      const hi = counts[base + Math.min(this.cols - 1, cx + 1) + 1];
-      for (let k = lo; k < hi; k++) fn(items[k]);
+    const { counts, items, cols, rows } = this;
+    for (let oy = -1; oy <= 1; oy++) {
+      const gy = (cy + oy + rows) % rows;
+      const base = gy * cols;
+      for (let ox = -1; ox <= 1; ox++) {
+        const gx = (cx + ox + cols) % cols;
+        const c = base + gx;
+        for (let k = counts[c]; k < counts[c + 1]; k++) fn(items[k]);
+      }
     }
   }
 }

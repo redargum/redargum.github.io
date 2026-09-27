@@ -5,7 +5,7 @@
  * nodes are bucketed by alignment and each bucket drawn as one path, which keeps the
  * whole network to a couple of dozen fill calls.
  */
-import { CAP, WORLD_W, WORLD_H, radius, clamp } from './model.js';
+import { CAP, WORLD_W, WORLD_H, radius, clamp, dx, dy } from './model.js';
 import { BINS } from './election.js';
 
 const BUCKETS = 21;
@@ -85,10 +85,10 @@ export class View {
       const giver = e[i] < e[p] ? i : p;
       const taker = giver === i ? p : i;
       const gx = ox + x[giver] * s, gy = oy + y[giver] * s;
-      const tx = ox + x[taker] * s, ty = oy + y[taker] * s;
+      const sx = dx(x[giver], x[taker]) * s, sy = dy(y[giver], y[taker]) * s;
       ctx.moveTo(gx, gy);
-      ctx.lineTo(gx + (tx - gx) * 0.62, gy + (ty - gy) * 0.62);
-      heads.rect(tx - 1, ty - 1, 2, 2);
+      ctx.lineTo(gx + sx * 0.62, gy + sy * 0.62);
+      heads.rect(gx + sx - 1, gy + sy - 1, 2, 2);
     }
     ctx.stroke();
     ctx.fillStyle = this.edge;

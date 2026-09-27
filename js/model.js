@@ -17,6 +17,14 @@ export const WORLD_W = 380;
 export const WORLD_H = 240;
 export const CAP = 1600;
 
+const HALF_W = WORLD_W / 2, HALF_H = WORLD_H / 2;
+
+/** Shortest separation on a torus: never reach across the field when the seam is nearer. */
+export function dx(a, b) { const d = b - a; return d > HALF_W ? d - WORLD_W : d < -HALF_W ? d + WORLD_W : d; }
+export function dy(a, b) { const d = b - a; return d > HALF_H ? d - WORLD_H : d < -HALF_H ? d + WORLD_H : d; }
+function wrapX(v) { return v < 0 ? v + WORLD_W : v >= WORLD_W ? v - WORLD_W : v; }
+function wrapY(v) { return v < 0 ? v + WORLD_H : v >= WORLD_H ? v - WORLD_H : v; }
+
 /** Golden-ratio floor on absorption, from the Kosmiki rules. */
 const PHI_INV = 0.618;
 
@@ -46,6 +54,8 @@ export const P = {
   recruitMin:  { v: 0.40, min: 0.05, max: 6, step: 0.05, label: 'Recruitment minimum (x mean)' },
   fanout:      { v: 3.0,  min: 1,    max: 12,   step: 0.5,   label: 'Children per unit size' },
   breakFree:   { v: 1.20, min: 1,    max: 4,    step: 0.05,  label: 'Break-free ratio' },
+  tolerance:   { v: 0.35, min: 0.02, max: 1,    step: 0.01,  label: 'Confidence bound' },
+  backfire:    { v: 0.55, min: 0,    max: 2,    step: 0.05,  label: 'Backfire' },
   mediaTop:    { v: 14,   min: 0,    max: 60,   step: 1,     label: 'Broadcasters' },
   mediaR:      { v: 130,  min: 20,   max: 400,  step: 5,     label: 'Broadcast reach' },
   mediaK:      { v: 0.022,min: 0,    max: 0.2,  step: 0.001, label: 'Broadcast strength' },
@@ -56,6 +66,8 @@ export const P = {
 
 /** One line per rule; `text` reads live values out of `P`, so the panel cannot go stale. */
 export const RULES = [
+  { name: 'A field without edges', keys: [],
+    text: () => 'The field is a torus: leave one side and you arrive at the other, and two cells are always as far apart as the shorter way round. Nothing piles up against a wall and no position is privileged.' },
   { name: 'Cells and sticks', keys: ['repel', 'stick', 'drag'],
     text: () => 'A node is a cell with energy, inertia and one alignment number, 0 for the challenger and 1 for the incumbent. Cells repel in proportion to their energy; a stick between two of them resists that repulsion with the smaller of the two energies. Nothing sits on a lattice — position is an outcome.' },
   { name: 'Energy runs uphill', keys: ['drain', 'compassion'],
@@ -72,6 +84,8 @@ export const RULES = [
     text: () => 'Past a multiple of the mean cell size a cell splits. The child keeps the parent’s views with a small mutation, the energy is halved between them, and the two start joined by a stick. Structures grow rather than being placed.' },
   { name: 'Income, upkeep and starvation', keys: ['influx', 'upkeep', 'metabolic', 'starve'],
     text: () => 'A fixed total income each second is split equally between every living cell, every cell pays upkeep on what it holds, and one that falls below the floor dies. Upkeep rises more slowly than size, as real metabolism does, so being large is cheaper per unit held \u2014 the economy of scale that lets a drained-from hierarchy run away from the cells feeding it.' },
+  { name: 'Bounded confidence', keys: ['tolerance', 'backfire'],
+    text: () => 'A cell is moved toward a view within the bound of its own and pushed away from one beyond it. This is what makes the field polarize: every other force here averages, and averaging can only converge, so without a repelled range every opinion collapses into one.' },
   { name: 'Mass media', keys: ['mediaTop', 'mediaR', 'mediaK'],
     text: () => 'The largest cells broadcast their alignment across a radius far beyond their own neighbourhood. Few transmitters with wide reach is what separates propaganda from conformity, and it is what makes holding the apparatus worth having: the pull is toward the broadcaster, not toward the local average.' },
   { name: 'Word of mouth', keys: ['influenceR', 'influenceK', 'influenceC'],
@@ -132,8 +146,7 @@ export class Model {
       this.a[head] = align;
       for (let k = 0; k < n; k++) {
         const ang = this.rng() * Math.PI * 2, r = Math.sqrt(this.rng()) * WORLD_W * 0.14;
-        const i = this.spawn(clamp(cx + Math.cos(ang) * r, 2, WORLD_W - 2),
-                             clamp(cy + Math.sin(ang) * r, 2, WORLD_H - 2), 1.5);
+        const i = this.spawn(wrapX(cx + Math.cos(ang) * r), wrapY(cy + Math.sin(ang) * r), 1.5);
         if (i < 0) break;
         this.a[i] = clamp(align + (align > 0.5 ? -1 : 1) * this.rng() * 0.25, 0, 1);
         this.link(i, head);
@@ -219,11 +232,11 @@ export class Model {
       let fx = 0, fy = 0;
       this.grid.forEachNear(xi, yi, j => {
         if (j === i || !alive[j]) return;
-        const dx = x[j] - xi, dy = y[j] - yi;
-        const d2 = dx * dx + dy * dy;
+        const ddx = dx(xi, x[j]), ddy = dy(yi, y[j]);
+        const d2 = ddx * ddx + ddy * ddy;
         if (d2 > R2 || d2 < 1e-6) return;
         const d = Math.sqrt(d2);
-        const ux = dx / d, uy = dy / d;
+        const ux = ddx / d, uy = ddy / d;
         const rep = krep * (ei + e[j]) / (d2 + 4);
         fx -= rep * ux; fy -= rep * uy;
         if (Math.abs(ai - a[j]) > P.theta.v) {
@@ -233,22 +246,17 @@ export class Model {
       });
       const p = this.parentOf(i);
       if (p >= 0) {
-        const dx = x[p] - xi, dy = y[p] - yi;
-        const d = Math.hypot(dx, dy) || 1e-3;
+        const ddx = dx(xi, x[p]), ddy = dy(yi, y[p]);
+        const d = Math.hypot(ddx, ddy) || 1e-3;
         const rest = radius(ei) + radius(e[p]) + 2;
         const k = kstick * Math.min(ei, e[p]);
         const f = k * (d - rest) / d;
-        fx += f * dx; fy += f * dy;
+        fx += f * ddx; fy += f * ddy;
       }
       const m = Math.max(0.4, ei);
       vx[i] = (vx[i] + fx / m) * (1 - P.drag.v);
       vy[i] = (vy[i] + fy / m) * (1 - P.drag.v);
-      let nx = xi + vx[i], ny = yi + vy[i];
-      if (nx < 2) { nx = 2; vx[i] = -vx[i] * 0.4; }
-      if (nx > WORLD_W - 2) { nx = WORLD_W - 2; vx[i] = -vx[i] * 0.4; }
-      if (ny < 2) { ny = 2; vy[i] = -vy[i] * 0.4; }
-      if (ny > WORLD_H - 2) { ny = WORLD_H - 2; vy[i] = -vy[i] * 0.4; }
-      x[i] = nx; y[i] = ny;
+      x[i] = wrapX(xi + vx[i]); y[i] = wrapY(yi + vy[i]);
     }
   }
 
@@ -294,11 +302,11 @@ export class Model {
       let spent = 0;
       this.grid.forEachNear(xi, yi, j => {
         if (j === i || !alive[j]) return;
-        const dx = x[j] - xi, dy = y[j] - yi;
-        const d2 = dx * dx + dy * dy;
+        const ddx = dx(xi, x[j]), ddy = dy(yi, y[j]);
+        const d2 = ddx * ddx + ddy * ddy;
         if (d2 > R2) return;
         const w = 1 - d2 / R2;
-        dA[j] += k * infl * w * (ai - a[j]);
+        dA[j] += k * infl * w * persuade(ai, a[j]);
         spent += w;
       });
       e[i] = Math.max(0, e[i] - P.influenceC.v * infl * spent);
@@ -338,11 +346,11 @@ export class Model {
       const xi = x[i], yi = y[i], ai = a[i];
       for (let j = 0; j < CAP; j++) {
         if (!alive[j] || j === i) continue;
-        const dx = x[j] - xi, dy = y[j] - yi;
-        const d2 = dx * dx + dy * dy;
+        const ddx = dx(xi, x[j]), ddy = dy(yi, y[j]);
+        const d2 = ddx * ddx + ddy * ddy;
         if (d2 > R2) continue;
         const w = 1 - d2 / R2;
-        dA[j] += strength * reach * w * (ai - a[j]);
+        dA[j] += strength * reach * w * persuade(ai, a[j]);
       }
     }
   }
@@ -388,8 +396,8 @@ export class Model {
         if (j === i || !alive[j] || e[j] > ceiling) return;
         if (this.parentOf(j) >= 0) return;
         if (Math.abs(ai - a[j]) > P.recruitGap.v) return;
-        const dx = x[j] - xi, dy = y[j] - yi;
-        const d2 = dx * dx + dy * dy;
+        const ddx = dx(xi, x[j]), ddy = dy(yi, y[j]);
+        const d2 = ddx * ddx + ddy * ddy;
         if (d2 < bestD) { bestD = d2; best = j; }
       });
       if (best >= 0) { this.link(best, i); kids[i]++; }
@@ -409,8 +417,8 @@ export class Model {
         if (victim >= 0 || j === i || !alive[j]) return;
         if (Math.abs(ai - a[j]) < gap) return;
         if (!this.canAbsorb(i, j)) return;
-        const dx = x[j] - xi, dy = y[j] - yi;
-        if (dx * dx + dy * dy > R2) return;
+        const ddx = dx(xi, x[j]), ddy = dy(yi, y[j]);
+        if (ddx * ddx + ddy * ddy > R2) return;
         victim = j;
       });
       if (victim < 0) continue;
@@ -431,10 +439,7 @@ export class Model {
       const half = e[i] / 2;
       const ang = rng() * Math.PI * 2;
       const r = radius(half) + 3;
-      const j = this.spawn(
-        clamp(x[i] + Math.cos(ang) * r, 2, WORLD_W - 2),
-        clamp(y[i] + Math.sin(ang) * r, 2, WORLD_H - 2),
-        half);
+      const j = this.spawn(wrapX(x[i] + Math.cos(ang) * r), wrapY(y[i] + Math.sin(ang) * r), half);
       if (j < 0) break;
       e[i] = half;
       a[j] = clamp(a[i] + gauss(rng) * P.mutate.v, 0, 1);
@@ -501,6 +506,18 @@ function sortTop(top, e, n) {
     while (b >= 0 && e[top[b]] < ev) { top[b + 1] = top[b]; b--; }
     top[b + 1] = v;
   }
+}
+
+/**
+ * Bounded confidence: a cell is moved toward a view close enough to its own and pushed away
+ * from one too far off. Every force here used to be an averaging force, and averaging can
+ * only ever converge — without a repelled range the whole field collapses onto one opinion.
+ */
+function persuade(from, to) {
+  const gap = from - to;
+  const t = P.tolerance.v;
+  if (Math.abs(gap) <= t) return gap;
+  return -Math.sign(gap) * P.backfire.v * (Math.abs(gap) - t);
 }
 
 export function radius(energy) { return 0.9 + Math.sqrt(Math.max(0, energy)) * 0.9; }
