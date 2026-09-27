@@ -1,0 +1,1677 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How a hierarchy puts a tail in an election</title>
+<style>
+:root {
+  --bg:        #0d1016;
+  --surface:   #161b24;
+  --border:    #262e3c;
+  --text:      #c9d2e0;
+  --muted:     #6b7789;
+  --accent:    #d8a24a;
+
+  --main:      #e66767;
+  --opp:       #3987e5;
+  --mid:       #6a6f78;
+  --sweep:     #199e70;
+  --edge:      #39414f;
+  --grid:      #222a36;
+
+  --font: system-ui, 'Segoe UI', sans-serif;
+  --mono: 'SF Mono', 'Fira Code', Consolas, monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.45 var(--font);
+  height: 100vh;
+  display: flex;
+  overflow: hidden;
+}
+
+/* ── Left: canvases ─────────────────────────────────────────────────── */
+
+#stage { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+#net-wrap { flex: 1; position: relative; min-height: 0; }
+#net { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+#panels {
+  height: 240px;
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: 1px;
+  background: var(--border);
+  border-top: 1px solid var(--border);
+}
+
+.panel { background: var(--bg); position: relative; min-width: 0; }
+.panel canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.panel h2 {
+  position: absolute; top: 6px; left: 8px;
+  font-size: 11px; font-weight: 600; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--muted);
+  pointer-events: none; z-index: 1;
+}
+.panel .readout {
+  position: absolute; top: 6px; right: 8px;
+  font: 11px var(--mono); color: var(--accent); text-align: right;
+  pointer-events: none; z-index: 1;
+}
+
+/* ── Right: controls ────────────────────────────────────────────────── */
+
+#side {
+  width: 290px;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  overflow-y: auto;
+}
+
+#side header { padding: 12px 14px 8px; border-bottom: 1px solid var(--border); }
+#side h1 { font-size: 17px; letter-spacing: .06em; }
+#side header p { color: var(--muted); font-size: 11px; margin-top: 3px; }
+
+.group { padding: 10px 14px; border-bottom: 1px solid var(--border); }
+.group > h3 {
+  font-size: 10px; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--muted); margin-bottom: 8px;
+}
+
+.ctl { margin-bottom: 9px; }
+.ctl label { display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 2px; }
+.ctl label span:last-child { font-family: var(--mono); color: var(--accent); }
+.ctl input[type=range] { width: 100%; accent-color: var(--accent); }
+
+.ctl.hero label { font-size: 13px; font-weight: 600; }
+.ctl.hero label span:last-child { font-size: 15px; }
+.ctl.hero input[type=range] { height: 22px; }
+
+.meter { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; margin-top: 4px; }
+.meter > div { height: 100%; background: linear-gradient(90deg, var(--main), var(--accent), var(--opp)); }
+
+button {
+  font: inherit; font-size: 12px;
+  background: var(--border); color: var(--text);
+  border: 1px solid transparent; border-radius: 3px;
+  padding: 5px 9px; cursor: pointer;
+}
+button:hover { border-color: var(--muted); }
+button.on { background: var(--accent); color: #17130a; }
+button.wide { width: 100%; }
+
+.row { display: flex; gap: 5px; flex-wrap: wrap; }
+.row > button { flex: 1; }
+
+.check { display: flex; align-items: center; gap: 6px; font-size: 11px; margin-bottom: 6px; }
+.check input { accent-color: var(--accent); }
+
+.stat { display: flex; justify-content: space-between; font-size: 11px; padding: 1px 0; }
+.stat span:last-child { font-family: var(--mono); color: var(--text); }
+
+/* ── Rules overlay ──────────────────────────────────────────────────── */
+
+#rules {
+  position: fixed; inset: 0;
+  background: rgba(5,7,11,.86);
+  display: none; align-items: center; justify-content: center;
+  z-index: 40;
+}
+#rules.open { display: flex; }
+#rules-box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  width: min(760px, 92vw); max-height: 88vh;
+  display: flex; flex-direction: column;
+}
+#rules-head {
+  display: flex; align-items: baseline; gap: 10px;
+  padding: 12px 16px; border-bottom: 1px solid var(--border);
+}
+#rules-head h2 { font-size: 15px; }
+#rules-head p { color: var(--muted); font-size: 11px; flex: 1; }
+#rules-list { overflow-y: auto; padding: 4px 0; }
+
+.rule { display: grid; grid-template-columns: 116px 1fr; gap: 12px; padding: 7px 16px; }
+.rule:nth-child(odd) { background: rgba(255,255,255,.017); }
+.rule-name { font-weight: 600; font-size: 12px; }
+.rule-text { font-size: 12px; color: var(--text); }
+.rule-text code { font-family: var(--mono); font-size: 11px; color: var(--accent); }
+.rule-vals { font-family: var(--mono); font-size: 10.5px; color: var(--muted); margin-top: 2px; }
+
+/* ── Debug panel ────────────────────────────────────────────────────── */
+
+#debug-panel {
+  position: fixed; right: 0; bottom: 0; width: 460px; max-height: 50vh;
+  background: var(--surface); border: 1px solid var(--border);
+  display: none; flex-direction: column; z-index: 50;
+  font-family: var(--mono); font-size: 11px;
+}
+#debug-panel.open { display: flex; }
+#debug-header { display: flex; gap: 6px; align-items: center; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+#debug-title { flex: 1; font-weight: 600; }
+#debug-log { overflow-y: auto; padding: 4px 8px; }
+.dl-entry { display: flex; gap: 6px; padding: 1px 0; }
+.dl-time { color: var(--muted); }
+.dl-level { width: 40px; color: var(--muted); }
+.dl-error .dl-msg { color: var(--main); }
+.dl-warn  .dl-msg { color: var(--accent); }
+.dl-empty { color: var(--muted); padding: 6px 0; }
+</style>
+</head>
+<body>
+
+
+<div id="stage">
+  <div id="net-wrap"><canvas id="net"></canvas></div>
+  <div id="panels">
+    <div class="panel">
+      <h2>Votes by turnout</h2>
+      <div class="readout" id="ro-hist"></div>
+      <canvas id="hist"></canvas>
+    </div>
+    <div class="panel">
+      <h2>Turnout / share</h2>
+      <canvas id="scatter"></canvas>
+    </div>
+    <div class="panel">
+      <h2>Compassion sweep</h2>
+      <div class="readout" id="ro-sweep"></div>
+      <canvas id="sweep"></canvas>
+    </div>
+  </div>
+</div>
+
+<aside id="side">
+  <header>
+    <h1>COMPASSION</h1>
+    <p>Cells drain their weaker neighbours. Nobody cheats at the ballot; the tail is loyalty.</p>
+  </header>
+
+  <div class="group">
+    <div class="ctl hero">
+      <label for="p-compassion"><span>Compassion</span><span id="v-compassion"></span></label>
+      <input type="range" id="p-compassion">
+      <div class="meter"><div id="m-compassion"></div></div>
+    </div>
+    <div class="row">
+      <button id="btn-rules">Rules</button>
+      <button id="btn-sweep">Sweep compassion</button>
+    </div>
+  </div>
+
+  <div class="group">
+    <h3>Election</h3>
+    <label class="check"><input type="checkbox" id="opt-control" checked>
+      Overlay the counterfactual where everyone votes for themselves</label>
+    <div class="row"><button id="btn-vote" class="wide">Hold an election now</button></div>
+    <div id="stats"></div>
+  </div>
+
+  <div class="group">
+    <h3>Presets</h3>
+    <div class="row">
+      <button data-preset="compassionate">Compassionate</button>
+      <button data-preset="ruthless">Ruthless</button>
+      <button data-preset="purge">Over-repressive</button>
+    </div>
+    <div class="ctl" style="margin-top:8px">
+      <label for="p-speed"><span>Speed</span><span id="v-speed"></span></label>
+      <input type="range" id="p-speed" min="1" max="120" step="1" value="10">
+    </div>
+    <div class="ctl">
+      <label for="p-draw"><span>Draw every</span><span id="v-draw"></span></label>
+      <input type="range" id="p-draw" min="1" max="30" step="1" value="1">
+    </div>
+    <div class="row">
+      <button id="btn-pause">Pause</button>
+      <button id="btn-reset">Reset</button>
+      <button id="btn-debug">DBG</button>
+    </div>
+  </div>
+
+  <div class="group" id="g-model"><h3>Model</h3></div>
+  <div class="group" id="g-election"><h3>Election</h3></div>
+</aside>
+
+<div id="rules">
+  <div id="rules-box">
+    <div id="rules-head">
+      <h2>Every rule this page runs</h2>
+      <p>values are live</p>
+      <button id="rules-close">✕</button>
+    </div>
+    <div id="rules-list"></div>
+  </div>
+</div>
+
+<script type="module">
+// ============================================================================
+// Uniform grid over a torus
+// ============================================================================
+
+/**
+ * Uniform grid over a fixed world rectangle, rebuilt each step by counting sort.
+ *
+ * Ported from the neighbour lookup in Kudinov's Kosmiki, which takes it from the
+ * CUDA SDK particles sample: bucket by cell, then visit the 3x3 block around a query.
+ */
+class Grid {
+  constructor(width, height, cell, capacity) {
+    this.w = width;
+    this.h = height;
+    this.cell = cell;
+    this.cols = Math.ceil(width / cell);
+    this.rows = Math.ceil(height / cell);
+    this.counts = new Int32Array(this.cols * this.rows + 1);
+    this.items = new Int32Array(capacity);
+    this.cellOf = new Int32Array(capacity);
+  }
+
+  cellIndex(x, y) {
+    let cx = (x / this.cell) | 0;
+    let cy = (y / this.cell) | 0;
+    if (cx < 0) cx = 0; else if (cx >= this.cols) cx = this.cols - 1;
+    if (cy < 0) cy = 0; else if (cy >= this.rows) cy = this.rows - 1;
+    return cy * this.cols + cx;
+  }
+
+  rebuild(xs, ys, alive, count) {
+    const { counts, items, cellOf } = this;
+    counts.fill(0);
+    for (let i = 0; i < count; i++) {
+      if (!alive[i]) { cellOf[i] = -1; continue; }
+      const c = this.cellIndex(xs[i], ys[i]);
+      cellOf[i] = c;
+      counts[c + 1]++;
+    }
+    for (let c = 1; c < counts.length; c++) counts[c] += counts[c - 1];
+    const cursor = this._cursor ??= new Int32Array(counts.length);
+    cursor.set(counts);
+    for (let i = 0; i < count; i++) {
+      const c = cellOf[i];
+      if (c >= 0) items[cursor[c]++] = i;
+    }
+  }
+
+  /**
+   * Call fn(j) for every live node in the 3x3 cell block around (x, y), wrapping at the
+   * edges: the field is a torus, so the block around a border cell continues on the far side.
+   */
+  forEachNear(x, y, fn) {
+    const cx = Math.min(this.cols - 1, Math.max(0, (x / this.cell) | 0));
+    const cy = Math.min(this.rows - 1, Math.max(0, (y / this.cell) | 0));
+    const { counts, items, cols, rows } = this;
+    for (let oy = -1; oy <= 1; oy++) {
+      const gy = (cy + oy + rows) % rows;
+      const base = gy * cols;
+      for (let ox = -1; ox <= 1; ox++) {
+        const gx = (cx + ox + cols) % cols;
+        const c = base + gx;
+        for (let k = counts[c]; k < counts[c + 1]; k++) fn(items[k]);
+      }
+    }
+  }
+}
+
+// ============================================================================
+// The model: cells, sticks, energy, alignment
+// ============================================================================
+
+/**
+ * Compassion — cells joined by sticks, competing for energy on a plane.
+ *
+ * The rules come from Kudinov's Kosmiki (https://habr.com/ru/articles/153169/): a
+ * force-based graph with inertia, cells that repel in proportion to energy, sticks that
+ * resist that repulsion, energy moving along every stick from the smaller cell to the
+ * larger, and absorption limited to victims holding at least 61.8% of the attacker's
+ * energy, which is what forces branched structures instead of one giant eating dust.
+ *
+ * Kosmiki has no lattice: every cell acts on every cell. The grid here is only a
+ * broad-phase index and it imposes a cutoff radius the original does not have — a real
+ * divergence, taken because the browser will not carry 10^8 pair tests a frame.
+ */
+
+const WORLD_W = 380;
+const WORLD_H = 240;
+const CAP = 1600;
+
+const HALF_W = WORLD_W / 2, HALF_H = WORLD_H / 2;
+
+/** Shortest separation on a torus: never reach across the field when the seam is nearer. */
+function dx(a, b) { const d = b - a; return d > HALF_W ? d - WORLD_W : d < -HALF_W ? d + WORLD_W : d; }
+function dy(a, b) { const d = b - a; return d > HALF_H ? d - WORLD_H : d < -HALF_H ? d + WORLD_H : d; }
+function wrapX(v) { return v < 0 ? v + WORLD_W : v >= WORLD_W ? v - WORLD_W : v; }
+function wrapY(v) { return v < 0 ? v + WORLD_H : v >= WORLD_H ? v - WORLD_H : v; }
+
+/** Golden-ratio floor on absorption, from the Kosmiki rules. */
+const PHI_INV = 0.618;
+
+/** Every tunable the model reads. `rules.js` renders the panel from this object. */
+const P = {
+  compassion:  { v: 0.10, min: 0,    max: 1,    step: 0.01,  label: 'Compassion' },
+  cSpread:     { v: 0.10, min: 0,    max: 0.4,  step: 0.01,  label: 'Compassion spread' },
+  drain:       { v: 0.020, min: 0, max: 0.2, step: 0.001, label: 'Drain per stick' },
+  divide:      { v: 5.0, min: 1.5, max: 30, step: 0.1, label: 'Division threshold (x mean)' },
+  starve:      { v: 0.15, min: 0.01, max: 1, step: 0.01, label: 'Starvation floor (x mean)' },
+  influx:      { v: 9.0, min: 0.5, max: 60, step: 0.5, label: 'Total energy per step' },
+  upkeep:      { v: 0.018, min: 0.001, max: 0.1, step: 0.001, label: 'Upkeep' },
+  metabolic:   { v: 0.75, min: 0.5,  max: 1,    step: 0.01,  label: 'Metabolic exponent' },
+  repel:       { v: 0.25, min: 0, max: 2, step: 0.01, label: 'Cell repulsion' },
+  stick:       { v: 0.006, min: 0, max: 0.05, step: 0.0005, label: 'Stick stiffness' },
+  drag:        { v: 0.11, min: 0.01, max: 0.6, step: 0.01, label: 'Drag' },
+  hunt:        { v: 0.10, min: 0, max: 1, step: 0.01, label: 'Hunt / flee force' },
+  influenceR:  { v: 30,   min: 10,   max: 70,   step: 1,     label: 'Enforcement radius' },
+  influenceK:  { v: 0.040, min: 0, max: 0.3, step: 0.001, label: 'Media strength' },
+  influenceC:  { v: 0.0001, min: 0, max: 0.01, step: 0.0001, label: 'Media cost' },
+  theta:       { v: 0.30, min: 0.02, max: 1,    step: 0.01,  label: 'Destruction threshold' },
+  absorbFloor: { v: PHI_INV, min: 0.05, max: 1, step: 0.01, label: 'Absorption floor' },
+  surcharge:   { v: 0.35, min: 0,    max: 2,    step: 0.05,  label: 'Destruction surcharge' },
+  lambda:      { v: 0.004, min: 0, max: 0.05, step: 0.0005, label: 'Neglect drift' },
+  povRef:      { v: 0.90, min: 0.1, max: 8, step: 0.1, label: 'Neglect reference (x mean)' },
+  recruitR:    { v: 22,   min: 6,    max: 60,   step: 1,     label: 'Recruitment radius' },
+  recruitMin:  { v: 0.40, min: 0.05, max: 6, step: 0.05, label: 'Recruitment minimum (x mean)' },
+  fanout:      { v: 3.0,  min: 1,    max: 12,   step: 0.5,   label: 'Children per unit size' },
+  breakFree:   { v: 1.20, min: 1,    max: 4,    step: 0.05,  label: 'Break-free ratio' },
+  tolerance:   { v: 0.35, min: 0.02, max: 1,    step: 0.01,  label: 'Confidence bound' },
+  backfire:    { v: 0.55, min: 0,    max: 2,    step: 0.05,  label: 'Backfire' },
+  mediaTop:    { v: 14,   min: 0,    max: 60,   step: 1,     label: 'Broadcasters' },
+  mediaR:      { v: 130,  min: 20,   max: 400,  step: 5,     label: 'Broadcast reach' },
+  mediaK:      { v: 0.022,min: 0,    max: 0.2,  step: 0.001, label: 'Broadcast strength' },
+  recruitGap:  { v: 0.45, min: 0.05, max: 1,    step: 0.05,  label: 'Recruitment tolerance' },
+  mutate:      { v: 0.03, min: 0,    max: 0.3,  step: 0.005, label: 'Division mutation' },
+  erosion:     { v: 0,    min: 0,    max: 1,    step: 1,     label: 'Compassion erosion' },
+};
+
+/** One line per rule; `text` reads live values out of `P`, so the panel cannot go stale. */
+const RULES = [
+  { name: 'A field without edges', keys: [],
+    text: () => 'The field is a torus: leave one side and you arrive at the other, and two cells are always as far apart as the shorter way round. Nothing piles up against a wall and no position is privileged.' },
+  { name: 'Cells and sticks', keys: ['repel', 'stick', 'drag'],
+    text: () => 'A node is a cell with energy, inertia and one alignment number, 0 for the challenger and 1 for the incumbent. Cells repel in proportion to their energy; a stick between two of them resists that repulsion with the smaller of the two energies. Nothing sits on a lattice — position is an outcome.' },
+  { name: 'Energy runs uphill', keys: ['drain', 'compassion'],
+    text: () => 'Every stick moves a fixed quantum of energy per second between its two cells, and the compassion of the larger one sets the direction: below 0.5 it takes from the smaller, above 0.5 it gives. Extraction and redistribution are the same rule with the sign reversed. This is the whole concentration mechanism: tribute flows toward whoever already has more.' },
+  { name: 'Compassion', keys: ['compassion', 'cSpread'],
+    text: () => 'Which way a cell sends energy across its sticks. Below 0.5 it takes from whoever has less and the distribution goes heavy-tailed; above 0.5 it gives, and holdings level out. This one parameter decides whether the election grows a tail.' },
+  { name: 'The center is emergent', keys: [],
+    text: () => 'No node is designated. The head of a structure is whichever cell holds the most energy, and it changes hands when another overtakes it.' },
+  { name: 'Breaking free', keys: ['breakFree'],
+    text: () => 'A cell that grows past this multiple of its parent\u2019s size cuts the stick and stands on its own. No hierarchy can grow without limit: whoever the cascade makes strong stops being anyone\u2019s subordinate.' },
+  { name: 'Recruitment', keys: ['recruitR', 'recruitMin', 'recruitGap', 'fanout'],
+    text: () => 'A cell attaches the nearest unattached poorer cell of roughly its own views, up to a fanout that grows with its size. Absorbing in Kosmiki joins the victim on rather than deleting it, and this is the only thing that creates a stick.' },
+  { name: 'Division', keys: ['divide', 'mutate'],
+    text: () => 'Past a multiple of the mean cell size a cell splits. The child keeps the parent’s views with a small mutation, the energy is halved between them, and the two start joined by a stick. Structures grow rather than being placed.' },
+  { name: 'Income, upkeep and starvation', keys: ['influx', 'upkeep', 'metabolic', 'starve'],
+    text: () => 'A fixed total income each second is split equally between every living cell, every cell pays upkeep on what it holds, and one that falls below the floor dies. Upkeep rises more slowly than size, as real metabolism does, so being large is cheaper per unit held \u2014 the economy of scale that lets a drained-from hierarchy run away from the cells feeding it.' },
+  { name: 'Bounded confidence', keys: ['tolerance', 'backfire'],
+    text: () => 'A cell is moved toward a view within the bound of its own and pushed away from one beyond it. This is what makes the field polarize: every other force here averages, and averaging can only converge, so without a repelled range every opinion collapses into one.' },
+  { name: 'Mass media', keys: ['mediaTop', 'mediaR', 'mediaK'],
+    text: () => 'The largest cells broadcast their alignment across a radius far beyond their own neighbourhood. Few transmitters with wide reach is what separates propaganda from conformity, and it is what makes holding the apparatus worth having: the pull is toward the broadcaster, not toward the local average.' },
+  { name: 'Word of mouth', keys: ['influenceR', 'influenceK', 'influenceC'],
+    text: () => 'A cell spends energy to pull the alignment of every neighbour in its radius toward its own, with force rising with its energy and with <code>1 - c</code>: a compassionate cell persuades weakly, a ruthless one coerces. What a cell registers as pressure is that force divided by its own energy: domination is force measured against the ability to resist it, so the same push lands hard on a destitute neighbour and glances off a rich one.' },
+  { name: 'Neglect breeds dissent', keys: ['lambda', 'povRef'],
+    text: () => 'A cell near the starvation floor turns against the side its own patron belongs to. Because energy runs uphill the periphery is always the poorest, so it defects without anyone deciding it should \u2014 and because it defects from whoever rules it rather than toward a fixed side, neither side is a trap the other can never escape.' },
+  { name: 'Destruction', keys: ['theta', 'surcharge', 'absorbFloor'],
+    text: () => `A cell destroys a near opponent when the alignment gap exceeds <code>theta / (1 - c)</code>, when it holds more energy, and when the victim holds at least the absorption floor of the attacker's energy — you cannot eat something far beneath you, which is why hierarchies have to grow intermediate layers. The attacker pays the victim's full energy plus the surcharge.` },
+  { name: 'Hunting', keys: ['hunt'],
+    text: () => 'A cell accelerates toward opponents it could destroy and away from opponents that could destroy it. Fronts and territories come out of this, not out of any map.' },
+  { name: 'Repression is not free', keys: ['surcharge', 'influenceC'],
+    text: () => 'Destroying costs more than the victim held, and that energy is then not available for enforcement. Nothing forces the trade-off; it falls out of the two costs.' },
+  { name: 'Compassion erosion', keys: ['erosion'],
+    text: () => 'Off by default. With it on, a cell that is attacked loses compassion, so violence lowers the threshold for more violence. Compassion then becomes an outcome and can no longer be swept as a cause.' },
+];
+
+class Model {
+  constructor() { this.reset(); }
+
+  reset() {
+    this.x = new Float32Array(CAP);
+    this.y = new Float32Array(CAP);
+    this.vx = new Float32Array(CAP);
+    this.vy = new Float32Array(CAP);
+    this.e = new Float32Array(CAP);
+    this.a = new Float32Array(CAP);
+    this.cOff = new Float32Array(CAP);
+    this.c = new Float32Array(CAP);
+    this.parent = new Int32Array(CAP);
+    this.pgen = new Int32Array(CAP);
+    this.gen = new Int32Array(CAP);
+    this.voters = new Float32Array(CAP);
+    this.alive = new Uint8Array(CAP);
+    this.dA = new Float32Array(CAP);
+    this.kids = new Int32Array(CAP);
+    this.flow = new Float32Array(CAP);
+    this.top = new Int32Array(64);
+
+    this.free = new Int32Array(CAP);
+    this.freeTop = 0;
+    this.rng = mulberry32(0x5bd1e995);
+    this.meanE = 1;
+    this.time = 0;
+    this.destroyed = 0;
+    this.divided = 0;
+    this.live = 0;
+
+    this.parent.fill(-1);
+    for (let i = CAP - 1; i >= 0; i--) this.free[this.freeTop++] = i;
+
+    for (let s = 0; s < 240; s++) {
+      const i = this.spawn(this.rng() * WORLD_W, this.rng() * WORLD_H, 1.0);
+      if (i >= 0) this.a[i] = 0.5 + (this.rng() - 0.5) * 0.2;
+    }
+    for (const [fx, align, n] of [[0.33, 1, 70], [0.70, 0, 70]]) {
+      const cx = WORLD_W * fx, cy = WORLD_H * 0.5;
+      const head = this.spawn(cx, cy, 8);
+      this.a[head] = align;
+      for (let k = 0; k < n; k++) {
+        const ang = this.rng() * Math.PI * 2, r = Math.sqrt(this.rng()) * WORLD_W * 0.14;
+        const i = this.spawn(wrapX(cx + Math.cos(ang) * r), wrapY(cy + Math.sin(ang) * r), 1.5);
+        if (i < 0) break;
+        this.a[i] = clamp(align + (align > 0.5 ? -1 : 1) * this.rng() * 0.25, 0, 1);
+        this.link(i, head);
+      }
+    }
+
+    this.applyCompassion();
+    this.grid = new Grid(WORLD_W, WORLD_H, Math.max(P.influenceR.v, 24), CAP);
+  }
+
+  spawn(x, y, energy) {
+    if (this.freeTop === 0) return -1;
+    const i = this.free[--this.freeTop];
+    this.x[i] = x; this.y[i] = y;
+    this.vx[i] = 0; this.vy[i] = 0;
+    this.e[i] = energy;
+    this.a[i] = 0.5;
+    this.cOff[i] = gauss(this.rng) * P.cSpread.v;
+    this.c[i] = clamp(P.compassion.v + this.cOff[i], 0.01, 0.985);
+    this.parent[i] = -1;
+    this.gen[i]++;
+    this.voters[i] = Math.exp(6.0 + gauss(this.rng) * 0.8);
+    this.alive[i] = 1;
+    this.live++;
+    return i;
+  }
+
+  kill(i) {
+    if (!this.alive[i]) return;
+    this.alive[i] = 0;
+    this.parent[i] = -1;
+    this.free[this.freeTop++] = i;
+    this.live--;
+  }
+
+  /** Parent index, or -1 once the stick has gone: the slot died, or died and was reused. */
+  parentOf(i) {
+    const p = this.parent[i];
+    if (p < 0) return -1;
+    if (!this.alive[p] || this.gen[p] !== this.pgen[i]) { this.parent[i] = -1; return -1; }
+    return p;
+  }
+
+  link(child, par) {
+    this.parent[child] = par;
+    this.pgen[child] = this.gen[par];
+  }
+
+  applyCompassion() {
+    const m = P.compassion.v;
+    for (let i = 0; i < CAP; i++) {
+      if (this.alive[i]) this.c[i] = clamp(m + this.cOff[i], 0.01, 0.985);
+    }
+  }
+
+  step() {
+    this.time += 1;
+    const cell = Math.max(P.influenceR.v, 24);
+    if (this.grid.cell !== cell) this.grid = new Grid(WORLD_W, WORLD_H, cell, CAP);
+    this.grid.rebuild(this.x, this.y, this.alive, CAP);
+
+    this.forcePass();
+    this.breakFreePass();
+    this.drainPass();
+    this.influencePass();
+    this.broadcastPass();
+    this.alignPass();
+    this.recruitPass();
+    this.destroyPass();
+    this.dividePass();
+    this.incomePass();
+  }
+
+  /** Repulsion, stick tension, hunting and drag, integrated with inertia. */
+  forcePass() {
+    const { x, y, vx, vy, e, a, parent, alive } = this;
+    const R = P.influenceR.v, R2 = R * R;
+    const krep = P.repel.v, kstick = P.stick.v, khunt = P.hunt.v;
+
+    for (let i = 0; i < CAP; i++) {
+      if (!alive[i]) continue;
+      const xi = x[i], yi = y[i], ei = e[i], ai = a[i];
+      let fx = 0, fy = 0;
+      this.grid.forEachNear(xi, yi, j => {
+        if (j === i || !alive[j]) return;
+        const ddx = dx(xi, x[j]), ddy = dy(yi, y[j]);
+        const d2 = ddx * ddx + ddy * ddy;
+        if (d2 > R2 || d2 < 1e-6) return;
+        const d = Math.sqrt(d2);
+        const ux = ddx / d, uy = ddy / d;
+        const rep = krep * (ei + e[j]) / (d2 + 4);
+        fx -= rep * ux; fy -= rep * uy;
+        if (Math.abs(ai - a[j]) > P.theta.v) {
+          const dir = this.canAbsorb(i, j) ? 1 : this.canAbsorb(j, i) ? -1 : 0;
+          if (dir !== 0) { fx += khunt * dir * ux / d; fy += khunt * dir * uy / d; }
+        }
+      });
+      const p = this.parentOf(i);
+      if (p >= 0) {
+        const ddx = dx(xi, x[p]), ddy = dy(yi, y[p]);
+        const d = Math.hypot(ddx, ddy) || 1e-3;
+        const rest = radius(ei) + radius(e[p]) + 2;
+        const k = kstick * Math.min(ei, e[p]);
+        const f = k * (d - rest) / d;
+        fx += f * ddx; fy += f * ddy;
+      }
+      const m = Math.max(0.4, ei);
+      vx[i] = (vx[i] + fx / m) * (1 - P.drag.v);
+      vy[i] = (vy[i] + fy / m) * (1 - P.drag.v);
+      x[i] = wrapX(xi + vx[i]); y[i] = wrapY(yi + vy[i]);
+    }
+  }
+
+  /** A child that outgrows its parent past the ratio cuts the stick and stands on its own. */
+  breakFreePass() {
+    const { e, alive } = this;
+    for (let i = 0; i < CAP; i++) {
+      if (!alive[i]) continue;
+      const p = this.parentOf(i);
+      if (p >= 0 && e[i] > P.breakFree.v * e[p]) this.parent[i] = -1;
+    }
+  }
+
+  /** Each stick moves energy from the smaller cell to the larger, held back by compassion. */
+  drainPass() {
+    const { e, c, parent, alive, flow } = this;
+    flow.fill(0);
+    for (let i = 0; i < CAP; i++) {
+      if (!alive[i]) continue;
+      const p = this.parentOf(i);
+      if (p < 0) continue;
+      const lo = e[i] < e[p] ? i : p;
+      const hi = lo === i ? p : i;
+      const rate = P.drain.v * (1 - 2 * c[hi]);
+      const amount = rate > 0 ? Math.min(e[lo], rate) : -Math.min(e[hi], -rate);
+      flow[lo] -= amount;
+      flow[hi] += amount;
+    }
+    for (let i = 0; i < CAP; i++) {
+      if (alive[i]) e[i] = Math.max(0, e[i] + flow[i]);
+    }
+  }
+
+  influencePass() {
+    const { x, y, a, e, c, alive, dA } = this;
+    dA.fill(0);
+    const R = P.influenceR.v, R2 = R * R, k = P.influenceK.v;
+    for (let i = 0; i < CAP; i++) {
+      if (!alive[i]) continue;
+      const infl = (1 - c[i]) * e[i];
+      if (infl < 0.05) continue;
+      const xi = x[i], yi = y[i], ai = a[i];
+      let spent = 0;
+      this.grid.forEachNear(xi, yi, j => {
+        if (j === i || !alive[j]) return;
+        const ddx = dx(xi, x[j]), ddy = dy(yi, y[j]);
+        const d2 = ddx * ddx + ddy * ddy;
+        if (d2 > R2) return;
+        const w = 1 - d2 / R2;
+        dA[j] += k * infl * w * persuade(ai, a[j]);
+        spent += w;
+      });
+      e[i] = Math.max(0, e[i] - P.influenceC.v * infl * spent);
+    }
+  }
+
+  /**
+   * Mass media: the largest cells project alignment far beyond their own neighbourhood, while
+   * the local term reaches only as far as a cell can see. Few transmitters with wide reach is
+   * what makes this propaganda rather than conformity, and it is why holding the apparatus is
+   * worth anything — the pull is toward the broadcaster, not toward the local average.
+   */
+  broadcastPass() {
+    const { x, y, a, e, c, alive, dA, top } = this;
+    const k = Math.min(P.mediaTop.v | 0, top.length);
+    if (k === 0) return;
+
+    let n = 0;
+    for (let i = 0; i < CAP; i++) {
+      if (!alive[i]) continue;
+      if (n < k) {
+        top[n++] = i;
+        if (n === k) sortTop(top, e, n);
+      } else if (e[i] > e[top[k - 1]]) {
+        top[k - 1] = i;
+        sortTop(top, e, k);
+      }
+    }
+    if (n === 0) return;
+
+    const R = P.mediaR.v, R2 = R * R, strength = P.mediaK.v, mean = Math.max(1e-6, this.meanE);
+    for (let t = 0; t < n; t++) {
+      const i = top[t];
+      if (!alive[i]) continue;
+      const reach = (1 - c[i]) * (e[i] / mean);
+      if (reach < 0.05) continue;
+      const xi = x[i], yi = y[i], ai = a[i];
+      for (let j = 0; j < CAP; j++) {
+        if (!alive[j] || j === i) continue;
+        const ddx = dx(xi, x[j]), ddy = dy(yi, y[j]);
+        const d2 = ddx * ddx + ddy * ddy;
+        if (d2 > R2) continue;
+        const w = 1 - d2 / R2;
+        dA[j] += strength * reach * w * persuade(ai, a[j]);
+      }
+    }
+  }
+
+  alignPass() {
+    const { a, e, alive, dA } = this;
+    const lam = P.lambda.v;
+    for (let i = 0; i < CAP; i++) {
+      if (!alive[i]) continue;
+      let v = a[i] + dA[i];
+      const poverty = 1 - e[i] / (P.povRef.v * this.meanE);
+      if (poverty > 0) {
+        const patron = this.parentOf(i);
+        if (patron >= 0) v += lam * poverty * (a[patron] > 0.5 ? -1 : 1);
+      }
+      a[i] = clamp(v, 0, 1);
+    }
+  }
+
+  canAbsorb(i, j) {
+    return this.e[i] > this.e[j] && this.e[j] >= P.absorbFloor.v * this.e[i];
+  }
+
+  /**
+   * Absorption in Kosmiki attaches the victim rather than deleting it, and that is the only
+   * thing that creates a stick: with no recruitment nothing ever drains and no structure forms.
+   */
+  recruitPass() {
+    const { x, y, a, e, alive, kids } = this;
+    const R = P.recruitR.v, R2 = R * R;
+    kids.fill(0);
+    for (let i = 0; i < CAP; i++) {
+      if (!alive[i]) continue;
+      const p = this.parentOf(i);
+      if (p >= 0) kids[p]++;
+    }
+    for (let i = 0; i < CAP; i++) {
+      if (!alive[i] || e[i] < P.recruitMin.v * this.meanE) continue;
+      if (kids[i] >= 1 + P.fanout.v * Math.sqrt(e[i])) continue;
+      const xi = x[i], yi = y[i], ai = a[i], ceiling = e[i] * 0.9;
+      let best = -1, bestD = R2;
+      this.grid.forEachNear(xi, yi, j => {
+        if (j === i || !alive[j] || e[j] > ceiling) return;
+        if (this.parentOf(j) >= 0) return;
+        if (Math.abs(ai - a[j]) > P.recruitGap.v) return;
+        const ddx = dx(xi, x[j]), ddy = dy(yi, y[j]);
+        const d2 = ddx * ddx + ddy * ddy;
+        if (d2 < bestD) { bestD = d2; best = j; }
+      });
+      if (best >= 0) { this.link(best, i); kids[i]++; }
+    }
+  }
+
+  destroyPass() {
+    const { x, y, a, e, c, alive } = this;
+    const R = P.influenceR.v * 0.55, R2 = R * R;
+    for (let i = 0; i < CAP; i++) {
+      if (!alive[i]) continue;
+      const gap = P.theta.v / (1 - c[i]);
+      if (gap > 1) continue;
+      const xi = x[i], yi = y[i], ai = a[i], ei = e[i];
+      let victim = -1;
+      this.grid.forEachNear(xi, yi, j => {
+        if (victim >= 0 || j === i || !alive[j]) return;
+        if (Math.abs(ai - a[j]) < gap) return;
+        if (!this.canAbsorb(i, j)) return;
+        const ddx = dx(xi, x[j]), ddy = dy(yi, y[j]);
+        if (ddx * ddx + ddy * ddy > R2) return;
+        victim = j;
+      });
+      if (victim < 0) continue;
+      const cost = e[victim] * (1 + P.surcharge.v);
+      if (ei <= cost) continue;
+      e[i] = ei - cost;
+      if (P.erosion.v) this.cOff[victim] = Math.max(-0.5, this.cOff[victim] - 0.06);
+      this.kill(victim);
+      this.destroyed++;
+    }
+  }
+
+  dividePass() {
+    const { e, a, x, y, parent, alive, rng } = this;
+    const thr = P.divide.v * this.meanE;
+    for (let i = 0; i < CAP; i++) {
+      if (!alive[i] || e[i] < thr) continue;
+      const half = e[i] / 2;
+      const ang = rng() * Math.PI * 2;
+      const r = radius(half) + 3;
+      const j = this.spawn(wrapX(x[i] + Math.cos(ang) * r), wrapY(y[i] + Math.sin(ang) * r), half);
+      if (j < 0) break;
+      e[i] = half;
+      a[j] = clamp(a[i] + gauss(rng) * P.mutate.v, 0, 1);
+      this.link(j, i);
+      this.divided++;
+    }
+  }
+
+  /**
+   * A fixed total income is split equally between the living, so each new cell lowers what
+   * every cell receives. The population has no ceiling; it settles where income meets losses.
+   */
+  incomePass() {
+    const { e, alive, rng } = this;
+    const share = this.live > 0 ? P.influx.v / this.live : 0;
+    const rate = P.upkeep.v, exp = P.metabolic.v;
+    const floor = P.starve.v * this.meanE;
+    let sum = 0;
+    for (let i = 0; i < CAP; i++) {
+      if (!alive[i]) continue;
+      e[i] += share - Math.min(e[i], rate * Math.pow(e[i], exp));
+      if (e[i] < floor) this.kill(i); else sum += e[i];
+    }
+    this.meanE = this.live > 0 ? sum / this.live : 1;
+    while (this.live < 2) {
+      const i = this.spawn(rng() * WORLD_W, rng() * WORLD_H, 1.0);
+      if (i < 0) break;
+      this.a[i] = 0.5 + (rng() - 0.5) * 0.2;
+    }
+  }
+
+  /** The head of i's structure: follow the sticks up until nobody is above. */
+  headOf(i) {
+    let cur = i;
+    for (let hop = 0; hop < 64; hop++) {
+      const p = this.parentOf(cur);
+      if (p < 0) return cur;
+      cur = p;
+    }
+    return cur;
+  }
+
+  stats() {
+    let main = 0, opp = 0, eSum = 0, cSum = 0, eMax = 0, head = -1;
+    for (let i = 0; i < CAP; i++) {
+      if (!this.alive[i]) continue;
+      eSum += this.e[i];
+      cSum += this.c[i];
+      if (this.a[i] > 0.5) main++; else opp++;
+      if (this.e[i] > eMax) { eMax = this.e[i]; head = i; }
+    }
+    return {
+      live: this.live, main, opp, eSum, eMax, head,
+      compassion: cSum / Math.max(1, this.live),
+      destroyed: this.destroyed, divided: this.divided,
+    };
+  }
+}
+
+function sortTop(top, e, n) {
+  for (let a = 1; a < n; a++) {
+    const v = top[a], ev = e[v];
+    let b = a - 1;
+    while (b >= 0 && e[top[b]] < ev) { top[b + 1] = top[b]; b--; }
+    top[b + 1] = v;
+  }
+}
+
+/**
+ * Bounded confidence: a cell is moved toward a view close enough to its own and pushed away
+ * from one too far off. Every force here used to be an averaging force, and averaging can
+ * only ever converge — without a repelled range the whole field collapses onto one opinion.
+ */
+function persuade(from, to) {
+  const gap = from - to;
+  const t = P.tolerance.v;
+  if (Math.abs(gap) <= t) return gap;
+  return -Math.sign(gap) * P.backfire.v * (Math.abs(gap) - t);
+}
+
+function radius(energy) { return 0.9 + Math.sqrt(Math.max(0, energy)) * 0.9; }
+function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
+
+function mulberry32(seed) {
+  let t = seed >>> 0;
+  return function () {
+    t = (t + 0x6D2B79F5) >>> 0;
+    let r = Math.imul(t ^ (t >>> 15), 1 | t);
+    r = (r + Math.imul(r ^ (r >>> 7), 61 | r)) ^ r;
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+let spare = null;
+function gauss(rng) {
+  if (spare !== null) { const s = spare; spare = null; return s; }
+  let u, v, s;
+  do { u = rng() * 2 - 1; v = rng() * 2 - 1; s = u * u + v * v; } while (s === 0 || s >= 1);
+  const m = Math.sqrt(-2 * Math.log(s) / s);
+  spare = v * m;
+  return u * m;
+}
+
+// ============================================================================
+// The election: honest, decided by loyalty
+// ============================================================================
+
+/**
+ * An honest election, and the two curves Shpilkin's method compares.
+ *
+ * Nobody falsifies anything here. Every vote is cast willingly and counted as cast. The tail
+ * comes from loyalty instead: a cell inside a structure votes the way its head does, the more
+ * so the further the head towers over it, and it turns out to vote because the structure gets
+ * it to the polls. A cell answering to nobody votes its own preference at ordinary turnout.
+ * A landscape of big hierarchies therefore delivers near-unanimous blocks at high turnout,
+ * while free cells produce a normal core — which is the whole of the Shpilkin picture.
+ *
+ * Baseline turnout noise is drawn from a seeded generator, so re-running with loyalty off
+ * changes only the loyalty term and the two results are comparable station by station.
+ */
+
+const BINS = 50;
+
+const EP = {
+  baseTurnout: { v: 0.42, min: 0.1,  max: 0.9,  step: 0.01,  label: 'Baseline turnout' },
+  turnoutSd:   { v: 0.10, min: 0.01, max: 0.3,  step: 0.005, label: 'Turnout spread' },
+  temp:        { v: 0.16, min: 0.02, max: 0.8,  step: 0.01,  label: 'Preference sharpness' },
+  loyalty:     { v: 0.95, min: 0,    max: 1,    step: 0.01,  label: 'Loyalty to the head' },
+  mobilise:    { v: 0.50, min: 0,    max: 1,    step: 0.01,  label: 'Turnout the structure adds' },
+};
+
+const ELECTION_RULES = [
+  { name: 'Nobody cheats', keys: [],
+    text: () => 'Every vote is cast willingly and counted as cast. There is no stuffing, no inflation and no quota. Whatever shape the returns take, the mechanism producing it is social, not criminal.' },
+  { name: 'Capture', keys: ['loyalty'],
+    text: () => 'A cell votes the way the head of its structure does, in proportion to how far that head towers over it — <code>e_head / (e_head + e_self)</code>. Someone answering to nobody votes their own preference. Loyalty scales the whole effect, and at zero everyone votes for themselves.' },
+  { name: 'Mobilization', keys: ['baseTurnout', 'turnoutSd', 'mobilise'],
+    text: () => 'A captured cell is likelier to vote at all, because the structure gets it to the polls. Turnout and unanimity therefore rise together, which is why the anomaly appears along the turnout axis rather than anywhere else.' },
+  { name: 'Preference', keys: ['temp'],
+    text: () => 'Left alone, a cell votes a logistic of how far its own alignment sits above the midpoint. Sharpness sets how decisively a mild preference becomes a vote.' },
+];
+
+/**
+ * @returns {{main:Float64Array, opp:Float64Array, scatter:Float32Array, points:number,
+ *   totalVotes:number, mainShare:number, blocShare:number, stations:number, captured:number}}
+ */
+function runElection(model, { loyalty = true, seed = 1 } = {}) {
+  const rng = mulberry32(seed);
+  const main = new Float64Array(BINS);
+  const opp = new Float64Array(BINS);
+  const scatter = new Float32Array(2 * 4000);
+  let points = 0, totalMain = 0, totalVotes = 0, stations = 0, captured = 0;
+
+  const { baseTurnout, turnoutSd, temp, mobilise } = EP;
+  const loyaltyK = loyalty ? EP.loyalty.v : 0;
+  const stride = Math.max(1, (model.live / 4000) | 0);
+  let seen = 0;
+
+  for (let i = 0; i < CAP; i++) {
+    if (!model.alive[i]) continue;
+    stations++;
+
+    const head = model.headOf(i);
+    const grip = head === i ? 0
+      : loyaltyK * model.e[head] / (model.e[head] + model.e[i] + 1e-9);
+    if (grip > 0.5) captured++;
+
+    const own = 1 / (1 + Math.exp(-(model.a[i] - 0.5) / temp.v));
+    const headSide = head === i ? own : (model.a[head] > 0.5 ? 1 : 0);
+    const share = clamp((1 - grip) * own + grip * headSide, 0, 1);
+
+    const turnout = clamp(baseTurnout.v + gauss(rng) * turnoutSd.v + mobilise.v * grip, 0.03, 0.995);
+    const votes = model.voters[i] * turnout;
+    const bin = Math.min(BINS - 1, (turnout * BINS) | 0);
+    main[bin] += votes * share;
+    opp[bin] += votes * (1 - share);
+    totalMain += votes * share;
+    totalVotes += votes;
+
+    if (seen++ % stride === 0 && points < 4000) {
+      scatter[2 * points] = turnout;
+      scatter[2 * points + 1] = share;
+      points++;
+    }
+  }
+
+  return {
+    main, opp, scatter, points, stations, totalVotes, captured,
+    mainShare: totalVotes > 0 ? totalMain / totalVotes : 0,
+    blocShare: blocVote(main, opp, totalVotes),
+  };
+}
+
+/**
+ * Shpilkin's estimate, reading as it was meant to: the challenger curve is the shape a
+ * contest of free voters would have, scaled to the incumbent curve on the low-turnout flank
+ * where the structures do not reach. Whatever the incumbent curve carries above that is vote
+ * delivered by hierarchy rather than by preference.
+ */
+function blocVote(main, opp, totalVotes) {
+  if (totalVotes <= 0) return 0;
+  let mode = 0;
+  for (let b = 1; b < BINS; b++) if (opp[b] > opp[mode]) mode = b;
+  let sm = 0, so = 0;
+  for (let b = 0; b <= mode; b++) { sm += main[b]; so += opp[b]; }
+  if (so <= 0) return 0;
+  const k = sm / so;
+  let excess = 0;
+  for (let b = 0; b < BINS; b++) excess += Math.max(0, main[b] - k * opp[b]);
+  return excess / totalVotes;
+}
+
+// ============================================================================
+// Rendering
+// ============================================================================
+
+/**
+ * Canvas rendering. Colours come from the stylesheet, so the palette has one home.
+ *
+ * The diverging alignment scale is the validated blue/red pair with a grey midpoint;
+ * nodes are bucketed by alignment and each bucket drawn as one path, which keeps the
+ * whole network to a couple of dozen fill calls.
+ */
+
+
+const BUCKETS = 21;
+
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+function hex(h) {
+  const n = parseInt(h.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+function mix(a, b, t) {
+  return `rgb(${Math.round(a[0] + (b[0] - a[0]) * t)},${Math.round(a[1] + (b[1] - a[1]) * t)},${Math.round(a[2] + (b[2] - a[2]) * t)})`;
+}
+
+class View {
+  constructor() {
+    this.main = hex(css('--main'));
+    this.opp = hex(css('--opp'));
+    this.mid = hex(css('--mid'));
+    this.sweepColor = css('--sweep');
+    this.textMuted = css('--muted');
+    this.gridColor = css('--grid');
+    this.edge = css('--edge');
+
+    /** Alignment 0..1 straight into the red and blue channels; green only desaturates the
+     *  midpoint, which would otherwise read as vivid magenta rather than as "uncommitted". */
+    this.ramp = Array.from({ length: BUCKETS }, (_, k) => {
+      const a = k / (BUCKETS - 1);
+      const g = Math.round(90 * (1 - Math.abs(2 * a - 1)));
+      return `rgb(${Math.round(255 * a)},${g},${Math.round(255 * (1 - a))})`;
+    });
+
+    this.canvases = {};
+    for (const id of ['net', 'hist', 'scatter', 'sweep']) {
+      const el = document.getElementById(id);
+      this.canvases[id] = { el, ctx: el.getContext('2d', { alpha: false }) };
+    }
+    this.onResize = null;
+    this.resize();
+    window.addEventListener('resize', () => { this.resize(); this.onResize?.(); });
+  }
+
+  resize() {
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    for (const k in this.canvases) {
+      const { el } = this.canvases[k];
+      const r = el.getBoundingClientRect();
+      el.width = Math.max(1, Math.round(r.width * dpr));
+      el.height = Math.max(1, Math.round(r.height * dpr));
+      this.canvases[k].w = r.width;
+      this.canvases[k].h = r.height;
+      this.canvases[k].ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+  }
+
+  clear(key) {
+    const { ctx, w, h } = this.canvases[key];
+    ctx.fillStyle = css('--bg');
+    ctx.fillRect(0, 0, w, h);
+    return this.canvases[key];
+  }
+
+  drawNetwork(model) {
+    const { ctx, w, h } = this.clear('net');
+    const s = Math.min(w / WORLD_W, h / WORLD_H);
+    const ox = (w - WORLD_W * s) / 2, oy = (h - WORLD_H * s) / 2;
+    const { x, y, e, a, alive } = model;
+
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = this.edge;
+    ctx.beginPath();
+    const heads = new Path2D();
+    for (let i = 0; i < CAP; i++) {
+      if (!alive[i]) continue;
+      const p = model.parentOf(i);
+      if (p < 0) continue;
+      const giver = e[i] < e[p] ? i : p;
+      const taker = giver === i ? p : i;
+      const gx = ox + x[giver] * s, gy = oy + y[giver] * s;
+      const sx = dx(x[giver], x[taker]) * s, sy = dy(y[giver], y[taker]) * s;
+      ctx.moveTo(gx, gy);
+      ctx.lineTo(gx + sx * 0.62, gy + sy * 0.62);
+      heads.rect(gx + sx - 1, gy + sy - 1, 2, 2);
+    }
+    ctx.stroke();
+    ctx.fillStyle = this.edge;
+    ctx.fill(heads);
+
+    const paths = Array.from({ length: BUCKETS }, () => new Path2D());
+    for (let i = 0; i < CAP; i++) {
+      if (!alive[i]) continue;
+      const k = Math.round(clamp(a[i], 0, 1) * (BUCKETS - 1));
+      const r = Math.max(0.7, radius(e[i]) * s);
+      const cx = ox + x[i] * s, cy = oy + y[i] * s;
+      paths[k].moveTo(cx + r, cy);
+      paths[k].arc(cx, cy, r, 0, Math.PI * 2);
+    }
+    for (let k = 0; k < BUCKETS; k++) {
+      ctx.fillStyle = this.ramp[k];
+      ctx.fill(paths[k]);
+    }
+  }
+
+  /** Votes over turnout, one filled curve per party, with the counterfactual as an outline. */
+  drawHistogram(result, control) {
+    const { ctx, w, h } = this.clear('hist');
+    const pad = { l: 34, r: 10, t: 30, b: 24 };
+    const iw = w - pad.l - pad.r, ih = h - pad.t - pad.b;
+    let max = 1e-9;
+    for (let b = 0; b < BINS; b++) max = Math.max(max, result.main[b], result.opp[b]);
+    if (control) for (let b = 0; b < BINS; b++) max = Math.max(max, control.main[b], control.opp[b]);
+
+    ctx.strokeStyle = this.gridColor;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let t = 0; t <= 1.0001; t += 0.25) {
+      const px = Math.round(pad.l + t * iw) + 0.5;
+      ctx.moveTo(px, pad.t); ctx.lineTo(px, pad.t + ih);
+    }
+    ctx.stroke();
+
+    const curve = (arr, fill, stroke, dashed) => {
+      ctx.beginPath();
+      for (let b = 0; b < BINS; b++) {
+        const px = pad.l + (b + 0.5) / BINS * iw;
+        const py = pad.t + ih - (arr[b] / max) * ih;
+        b === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+      }
+      if (fill) {
+        ctx.lineTo(pad.l + iw, pad.t + ih);
+        ctx.lineTo(pad.l, pad.t + ih);
+        ctx.closePath();
+        ctx.fillStyle = fill;
+        ctx.fill();
+      }
+      ctx.setLineDash(dashed ? [3, 3] : []);
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.setLineDash([]);
+    };
+
+    curve(result.opp, 'rgba(57,135,229,.22)', css('--opp'), false);
+    curve(result.main, 'rgba(230,103,103,.22)', css('--main'), false);
+    if (control) curve(control.main, null, css('--main'), true);
+
+    ctx.fillStyle = this.textMuted;
+    ctx.font = '10px system-ui';
+    ctx.textAlign = 'center';
+    for (let t = 0; t <= 1.0001; t += 0.25) {
+      ctx.fillText(`${Math.round(t * 100)}%`, pad.l + t * iw, h - 7);
+    }
+    ctx.save();
+    ctx.translate(11, pad.t + ih / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.textAlign = 'center';
+    ctx.fillText('votes', 0, 0);
+    ctx.restore();
+
+    this.legend(ctx, pad.l + iw - 148, pad.t + 12, [
+      [css('--main'), 'incumbent'],
+      [css('--opp'), 'challenger'],
+    ]);
+  }
+
+  drawScatter(result) {
+    const { ctx, w, h } = this.clear('scatter');
+    const pad = { l: 28, r: 10, t: 26, b: 22 };
+    const iw = w - pad.l - pad.r, ih = h - pad.t - pad.b;
+
+    ctx.strokeStyle = this.gridColor;
+    ctx.strokeRect(pad.l + 0.5, pad.t + 0.5, iw, ih);
+
+    ctx.fillStyle = 'rgba(230,103,103,.5)';
+    for (let k = 0; k < result.points; k++) {
+      const tx = result.scatter[2 * k], sy = result.scatter[2 * k + 1];
+      ctx.fillRect(pad.l + tx * iw - 0.75, pad.t + ih - sy * ih - 0.75, 1.5, 1.5);
+    }
+
+    ctx.fillStyle = this.textMuted;
+    ctx.font = '10px system-ui';
+    ctx.textAlign = 'left';
+    ctx.fillText('turnout →', pad.l, h - 7);
+    ctx.save();
+    ctx.translate(10, pad.t + ih / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.textAlign = 'center';
+    ctx.fillText('incumbent share', 0, 0);
+    ctx.restore();
+  }
+
+  /** Administrative share against compassion: the claim the page exists to make. */
+  drawSweep(points, live) {
+    const { ctx, w, h } = this.clear('sweep');
+    const pad = { l: 32, r: 12, t: 26, b: 22 };
+    const iw = w - pad.l - pad.r, ih = h - pad.t - pad.b;
+
+    ctx.strokeStyle = this.gridColor;
+    ctx.strokeRect(pad.l + 0.5, pad.t + 0.5, iw, ih);
+
+    ctx.fillStyle = this.textMuted;
+    ctx.font = '10px system-ui';
+    ctx.textAlign = 'center';
+    ctx.fillText('compassion →', pad.l + iw / 2, h - 7);
+
+    if (points.length === 0) {
+      ctx.fillText('press Sweep compassion', pad.l + iw / 2, pad.t + ih / 2);
+      return;
+    }
+
+    const px = c => pad.l + c * iw;
+    const py = v => pad.t + ih - clamp(v / 0.5, 0, 1) * ih;
+
+    ctx.beginPath();
+    points.forEach((p, k) => (k === 0 ? ctx.moveTo(px(p.c), py(p.admin)) : ctx.lineTo(px(p.c), py(p.admin))));
+    ctx.strokeStyle = this.sweepColor;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    const last = points[points.length - 1];
+    ctx.fillStyle = this.sweepColor;
+    ctx.beginPath();
+    ctx.arc(px(last.c), py(last.admin), 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.textAlign = last.c > 0.5 ? 'right' : 'left';
+    ctx.fillText('bloc vote', px(last.c) + (last.c > 0.5 ? -8 : 8), py(last.admin) - 6);
+
+    if (live) {
+      ctx.strokeStyle = 'rgba(255,255,255,.18)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(px(live), pad.t);
+      ctx.lineTo(px(live), pad.t + ih);
+      ctx.stroke();
+    }
+  }
+
+  legend(ctx, x, y, items) {
+    ctx.font = '10px system-ui';
+    ctx.textAlign = 'left';
+    let cx = x;
+    for (const [color, label] of items) {
+      ctx.fillStyle = color;
+      ctx.fillRect(cx, y - 4, 7, 7);
+      ctx.fillStyle = this.textMuted;
+      ctx.fillText(label, cx + 11, y + 2);
+      cx += 18 + ctx.measureText(label).width;
+    }
+  }
+}
+
+// ============================================================================
+// The rules panel
+// ============================================================================
+
+/**
+ * The rules panel, rendered from the same parameter objects the model reads so the text
+ * cannot describe a model other than the one running.
+ */
+
+
+function initRules() {
+  const overlay = document.getElementById('rules');
+  const list = document.getElementById('rules-list');
+
+  document.getElementById('btn-rules').onclick = open;
+  document.getElementById('rules-close').onclick = close;
+  overlay.onclick = e => { if (e.target === overlay) close(); };
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+
+  function open() { render(); overlay.classList.add('open'); }
+  function close() { overlay.classList.remove('open'); }
+
+  function render() {
+    list.innerHTML = [
+      section('Model', RULES, P),
+      section('Election', ELECTION_RULES, EP),
+    ].join('');
+  }
+
+  function section(title, rules, params) {
+    return `<div class="rule"><div class="rule-name" style="color:var(--accent)">${title}</div><div></div></div>` +
+      rules.map(r => {
+        const vals = r.keys
+          .filter(k => params[k])
+          .map(k => `${params[k].label} ${fmt(params[k].v)}`)
+          .join(' · ');
+        return `<div class="rule"><div class="rule-name">${r.name}</div>` +
+          `<div><div class="rule-text">${r.text()}</div>` +
+          (vals ? `<div class="rule-vals">${vals}</div>` : '') + '</div></div>';
+      }).join('');
+  }
+
+  function fmt(v) {
+    if (v === 0 || v === 1) return String(v);
+    return Math.abs(v) >= 100 ? v.toFixed(0) : Math.abs(v) >= 1 ? v.toFixed(2) : v.toFixed(3);
+  }
+
+  return { open };
+}
+
+// ============================================================================
+// Persistence
+// ============================================================================
+
+/** Config — stored in localStorage under a per-sketch key. */
+class Config {
+  constructor(key) {
+    this.key = key;
+  }
+
+  load() {
+    const raw = localStorage.getItem(this.key);
+    return raw ? JSON.parse(raw) : null;
+  }
+
+  save(cfg) {
+    localStorage.setItem(this.key, JSON.stringify(cfg));
+  }
+
+  clear() {
+    localStorage.removeItem(this.key);
+  }
+}
+
+// ============================================================================
+// Debug logger and panel
+// ============================================================================
+
+/** Client-side debug logger and panel. Toggle with Ctrl+Shift+D, or the DBG button. */
+
+const MAX_ENTRIES = 300;
+
+class DebugLogger {
+  constructor() {
+    this._entries = [];
+    this._meta = {};
+    this._listeners = [];
+
+    window.addEventListener('error', e => {
+      this.error(`Uncaught: ${e.message}`, { file: e.filename, line: e.lineno });
+    });
+    window.addEventListener('unhandledrejection', e => {
+      this.error(`Unhandled rejection: ${e.reason?.message ?? e.reason}`);
+    });
+
+    const origError = console.error.bind(console);
+    console.error = (...a) => { this._push('error', '[console] ' + a.join(' ')); origError(...a); };
+  }
+
+  info(msg, data) { this._push('info', msg, data); }
+  warn(msg, data) { this._push('warn', msg, data); }
+  error(msg, data) { this._push('error', msg, data); }
+
+  setMeta(meta) { this._meta = meta; }
+  clear() { this._entries = []; this._notify(); }
+  getEntries() { return this._entries; }
+  onChange(fn) { this._listeners.push(fn); }
+
+  report() {
+    return [
+      '=== debug report ===',
+      `Time: ${new Date().toISOString()}`,
+      ...Object.entries(this._meta).map(([k, v]) => `${k}: ${v}`),
+      '',
+      ...this._entries.map(e => `[${e.time}] ${e.level.padEnd(5)} ${e.msg}${e.data ? ' ' + JSON.stringify(e.data) : ''}`),
+    ].join('\n');
+  }
+
+  _push(level, msg, data) {
+    this._entries.unshift({ level, msg, data: data ?? null, time: new Date().toTimeString().slice(0, 8) });
+    if (this._entries.length > MAX_ENTRIES) this._entries.pop();
+    this._notify();
+  }
+
+  _notify() { this._listeners.forEach(fn => fn()); }
+}
+
+const dbg = new DebugLogger();
+
+function initDebugPanel() {
+  const panel = document.createElement('div');
+  panel.id = 'debug-panel';
+  panel.innerHTML = `
+    <div id="debug-header">
+      <span id="debug-title">Debug</span>
+      <button id="debug-copy">Copy</button>
+      <button id="debug-clear">Clear</button>
+      <button id="debug-close">✕</button>
+    </div>
+    <div id="debug-log"></div>`;
+  document.body.appendChild(panel);
+
+  document.addEventListener('keydown', e => {
+    if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'd') toggle();
+  });
+  document.getElementById('debug-close').onclick = () => panel.classList.remove('open');
+  document.getElementById('debug-clear').onclick = () => dbg.clear();
+  document.getElementById('debug-copy').onclick = () => navigator.clipboard.writeText(dbg.report());
+
+  dbg.onChange(render);
+
+  function render() {
+    if (!panel.classList.contains('open')) return;
+    const e = dbg.getEntries();
+    document.getElementById('debug-log').innerHTML = e.length === 0
+      ? '<div class="dl-empty">No entries.</div>'
+      : e.map(x => `<div class="dl-entry dl-${x.level}"><span class="dl-time">${x.time}</span>` +
+          `<span class="dl-level">${x.level}</span><span class="dl-msg">${esc(x.msg)}` +
+          `${x.data ? ' ' + esc(JSON.stringify(x.data)) : ''}</span></div>`).join('');
+  }
+
+  function toggle() { panel.classList.toggle('open'); render(); }
+  function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+
+  return { toggle };
+}
+
+// ============================================================================
+// Wiring: loop, controls, presets, sweep
+// ============================================================================
+
+/** Wiring: the loop, the controls, the presets and the compassion sweep. */
+
+
+
+
+
+
+const ELECTION_EVERY = 6;
+
+const PRESETS = {
+  compassionate: { compassion: 0.78, lambda: 0.25, theta: 0.6, surcharge: 0.35, influenceK: 0.12 },
+  ruthless:      { compassion: 0.10, lambda: 0.25, theta: 0.6, surcharge: 0.35, influenceK: 0.12 },
+  purge:         { compassion: 0.04, lambda: 0.25, theta: 0.28, surcharge: 1.4, influenceK: 0.25 },
+};
+
+const config = new Config('compassion');
+const model = new Model();
+const view = new View();
+const debugPanel = initDebugPanel();
+initRules();
+
+view.onResize = () => {
+  view.drawNetwork(model);
+  if (result) { view.drawHistogram(result, control); view.drawScatter(result); }
+  view.drawSweep(sweepPoints, P.compassion.v);
+};
+
+const speedInput = document.getElementById('p-speed');
+const speedLabel = document.getElementById('v-speed');
+speedInput.oninput = () => { speedLabel.textContent = `${speedInput.value}\u00d7`; };
+speedInput.oninput();
+
+const drawInput = document.getElementById('p-draw');
+const drawLabel = document.getElementById('v-draw');
+drawInput.oninput = () => {
+  const n = Number(drawInput.value);
+  drawLabel.textContent = n === 1 ? 'every frame' : `${n} frames`;
+};
+drawInput.oninput();
+
+const rate = { steps: 0, frames: 0, since: performance.now(), stepsPerSec: 0, fps: 0 };
+
+let paused = false;
+let sweepJob = null;
+let sweepPoints = [];
+let result = null;
+let control = null;
+let sinceVote = 0;
+let electionSeed = 1;
+
+buildControls(document.getElementById('g-model'), P, k => k !== 'compassion' && k !== 'drag');
+buildControls(document.getElementById('g-election'), EP, () => true);
+bindHero();
+restore();
+hold();
+
+document.getElementById('btn-vote').onclick = hold;
+document.getElementById('btn-pause').onclick = e => {
+  paused = !paused;
+  e.target.textContent = paused ? 'Resume' : 'Pause';
+  e.target.classList.toggle('on', paused);
+};
+document.getElementById('btn-reset').onclick = () => { model.reset(); sweepPoints = []; hold(); };
+document.getElementById('btn-debug').onclick = () => debugPanel.toggle();
+document.getElementById('btn-sweep').onclick = startSweep;
+document.getElementById('opt-control').onchange = hold;
+for (const b of document.querySelectorAll('[data-preset]')) {
+  b.onclick = () => applyPreset(b.dataset.preset);
+}
+
+/** One slider per parameter, so a rule and its control cannot disagree. */
+function buildControls(host, params, keep) {
+  for (const key in params) {
+    if (!keep(key)) continue;
+    const p = params[key];
+    const ctl = document.createElement('div');
+    ctl.className = 'ctl';
+    ctl.innerHTML = `<label for="x-${key}"><span>${p.label}</span><span id="xv-${key}"></span></label>` +
+      `<input type="range" id="x-${key}" min="${p.min}" max="${p.max}" step="${p.step}">`;
+    host.appendChild(ctl);
+    const input = ctl.querySelector('input');
+    input.value = p.v;
+    setLabel(key, p.v);
+    input.oninput = () => {
+      p.v = Number(input.value);
+      setLabel(key, p.v);
+      persist();
+    };
+  }
+}
+
+function setLabel(key, v) {
+  const el = document.getElementById(`xv-${key}`);
+  if (el) el.textContent = fmt(v);
+}
+
+function bindHero() {
+  const input = document.getElementById('p-compassion');
+  const p = P.compassion;
+  input.min = p.min; input.max = p.max; input.step = p.step; input.value = p.v;
+  input.oninput = () => {
+    p.v = Number(input.value);
+    model.applyCompassion();
+    syncHero();
+    persist();
+  };
+  syncHero();
+}
+
+function syncHero() {
+  document.getElementById('p-compassion').value = P.compassion.v;
+  document.getElementById('v-compassion').textContent = P.compassion.v.toFixed(2);
+  document.getElementById('m-compassion').style.width = `${P.compassion.v * 100}%`;
+}
+
+function applyPreset(name) {
+  for (const [k, v] of Object.entries(PRESETS[name])) P[k].v = v;
+  model.applyCompassion();
+  syncHero();
+  for (const key in P) {
+    const input = document.getElementById(`x-${key}`);
+    if (input) { input.value = P[key].v; setLabel(key, P[key].v); }
+  }
+  persist();
+  hold();
+  dbg.info(`preset ${name}`);
+}
+
+function hold() {
+  electionSeed++;
+  result = runElection(model, { loyalty: true, seed: electionSeed });
+  control = document.getElementById('opt-control').checked
+    ? runElection(model, { loyalty: false, seed: electionSeed })
+    : null;
+  sinceVote = 0;
+  view.drawHistogram(result, control);
+  view.drawScatter(result);
+  view.drawSweep(sweepPoints, P.compassion.v);
+  document.getElementById('ro-hist').textContent =
+    `incumbent ${(result.mainShare * 100).toFixed(1)}% · bloc vote ${(result.blocShare * 100).toFixed(1)}%`;
+  renderStats();
+}
+
+function renderStats() {
+  const s = model.stats();
+  document.getElementById('stats').innerHTML = [
+    ['Stations', result ? result.stations : 0],
+    ['Incumbent by preference', `${(100 * s.main / Math.max(1, s.live)).toFixed(0)}%`],
+    ['Incumbent reported', result ? `${(result.mainShare * 100).toFixed(1)}%` : '—'],
+    ['Bloc vote', result ? `${(result.blocShare * 100).toFixed(1)}%` : '—'],
+    ['Captured cells', result ? `${(100 * result.captured / Math.max(1, result.stations)).toFixed(0)}%` : '—'],
+    ['Largest cell', s.eMax.toFixed(0)],
+    ['Destroyed', s.destroyed],
+    ['Divided', s.divided],
+    ['Sim steps / s', rate.stepsPerSec],
+    ['Frames drawn / s', Math.round(rate.fps / Number(drawInput.value))],
+  ].map(([k, v]) => `<div class="stat"><span>${k}</span><span>${v}</span></div>`).join('');
+}
+
+/** Step compassion down from 1, letting the model settle at each stop before voting. */
+function startSweep() {
+  if (sweepJob) { sweepJob = null; document.getElementById('btn-sweep').classList.remove('on'); return; }
+  sweepPoints = [];
+  sweepJob = { c: 1.0, settle: 0, restore: P.compassion.v };
+  document.getElementById('btn-sweep').classList.add('on');
+  dbg.info('sweep started');
+}
+
+function advanceSweep() {
+  const job = sweepJob;
+  if (job.settle === 0) {
+    P.compassion.v = job.c;
+    model.applyCompassion();
+    syncHero();
+  }
+  const chunk = Math.max(10, Number(speedInput.value) * 3);
+  for (let k = 0; k < chunk; k++) model.step();
+  job.settle += chunk;
+  if (job.settle < 150) return;
+
+  const r = runElection(model, { loyalty: true, seed: 99 });
+  sweepPoints.push({ c: job.c, admin: r.blocShare });
+  sweepPoints.sort((a, b) => a.c - b.c);
+  view.drawSweep(sweepPoints, P.compassion.v);
+  document.getElementById('ro-sweep').textContent = `c=${job.c.toFixed(2)} · ${(r.blocShare * 100).toFixed(1)}%`;
+
+  job.settle = 0;
+  job.c = Math.round((job.c - 0.05) * 100) / 100;
+  if (job.c < -0.001) {
+    P.compassion.v = job.restore;
+    model.applyCompassion();
+    syncHero();
+    sweepJob = null;
+    document.getElementById('btn-sweep').classList.remove('on');
+    dbg.info('sweep done', { points: sweepPoints.length });
+    hold();
+  }
+}
+
+function persist() {
+  const out = { model: {}, election: {} };
+  for (const k in P) out.model[k] = P[k].v;
+  for (const k in EP) out.election[k] = EP[k].v;
+  config.save(out);
+}
+
+function restore() {
+  const saved = config.load();
+  if (!saved) return;
+  for (const k in saved.model ?? {}) if (P[k]) P[k].v = saved.model[k];
+  for (const k in saved.election ?? {}) if (EP[k]) EP[k].v = saved.election[k];
+  model.applyCompassion();
+  syncHero();
+  for (const [params, prefix] of [[P, 'x-'], [EP, 'x-']]) {
+    for (const k in params) {
+      const input = document.getElementById(prefix + k);
+      if (input) { input.value = params[k].v; setLabel(k, params[k].v); }
+    }
+  }
+}
+
+function fmt(v) {
+  return Math.abs(v) >= 100 ? v.toFixed(0) : Math.abs(v) >= 1 ? v.toFixed(2) : v.toFixed(3);
+}
+
+let last = performance.now(), frameNo = 0;
+function frame(now) {
+  const dt = Math.min(0.1, (now - last) / 1000);
+  last = now;
+  requestAnimationFrame(frame);
+
+  frameNo++;
+  const drawEvery = Number(drawInput.value);
+  const drawing = frameNo % drawEvery === 0;
+
+  if (sweepJob) { advanceSweep(); if (drawing) view.drawNetwork(model); return; }
+  if (paused) return;
+
+  const steps = Number(speedInput.value);
+  for (let k = 0; k < steps; k++) model.step();
+
+  rate.steps += steps;
+  rate.frames++;
+  if (now - rate.since >= 1000) {
+    const secs = (now - rate.since) / 1000;
+    rate.stepsPerSec = Math.round(rate.steps / secs);
+    rate.fps = Math.round(rate.frames / secs);
+    rate.steps = 0; rate.frames = 0; rate.since = now;
+  }
+
+  if (drawing) view.drawNetwork(model);
+
+  if (drawing) renderStats();
+
+  sinceVote += dt;
+  if (sinceVote >= ELECTION_EVERY) hold();
+}
+requestAnimationFrame(frame);
+
+dbg.setMeta({ capacity: CAP });
+dbg.info('ready');
+</script>
+</body>
+</html>
