@@ -675,11 +675,9 @@ export function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
 export const BINS = 50;
 
 export const EP = {
-  apathy:      { v: 0.10, min: 0,    max: 0.6,  step: 0.01,  label: 'Turnout of the indifferent' },
-  convinced:   { v: 0.72, min: 0.1,  max: 1,    step: 0.01,  label: 'Turnout of the committed' },
   temp:        { v: 0.16, min: 0.02, max: 0.8,  step: 0.01,  label: 'Preference sharpness' },
+  parityFall:  { v: 0.30, min: 0.05, max: 1,    step: 0.01,  label: 'How slowly turnout falls' },
   loyalty:     { v: 0.95, min: 0,    max: 1,    step: 0.01,  label: 'Loyalty to the head' },
-  mobilise:    { v: 1.00, min: 0,    max: 1,    step: 0.01,  label: 'How far a structure drags you out' },
 };
 
 export const ELECTION_RULES = [
@@ -687,10 +685,8 @@ export const ELECTION_RULES = [
     text: () => 'Every vote is cast willingly and counted as cast. There is no stuffing, no inflation and no quota. Whatever shape the returns take, the mechanism producing it is social, not criminal.' },
   { name: 'Capture', keys: ['loyalty'],
     text: () => 'A cell votes the way the head of its structure does, in proportion to how far that head towers over it — <code>e_head / (e_head + e_self)</code>. Someone answering to nobody votes their own preference. Loyalty scales the whole effect, and at zero everyone votes for themselves.' },
-  { name: 'Who turns out', keys: ['apathy', 'convinced'],
-    text: () => 'Conviction decides it, and conviction is distance from the midpoint. Someone holding a view strongly enough votes on it whichever side it is; someone in the middle does not think the exercise means anything and stays home. A committed challenger turns out as readily as a committed loyalist.' },
-  { name: 'Being turned out', keys: ['mobilise'],
-    text: () => 'Capture closes the gap between whatever you were willing to do and voting: the oppressed turn out near completely, because it is not really their decision. Turnout and unanimity therefore rise together, which is why the anomaly appears along the turnout axis.' },
+  { name: 'Who turns out', keys: ['parityFall'],
+    text: () => 'A cell answering to nobody votes on conviction alone, <code>|2a - 1|</code>: certain at either pole, not at all in the middle. A cell answering to someone votes on how far it stands from them, <code>min(1, e / e_parent) ^ parityFall</code>: fully at parity, and falling away the further its patron towers over it, gently rather than in proportion. Being dominated puts you off going, it does not march you out.' },
   { name: 'Preference', keys: ['temp'],
     text: () => 'Left alone, a cell votes a logistic of how far its own alignment sits above the midpoint. Sharpness sets how decisively a mild preference becomes a vote.' },
 ];
@@ -706,7 +702,7 @@ export function runElection(model, { loyalty = true, seed = 1 } = {}) {
   const scatter = new Float32Array(2 * 4000);
   let points = 0, redVotes = 0, totalVotes = 0, stations = 0, captured = 0;
 
-  const { apathy, convinced, temp, mobilise } = EP;
+  const { temp, parityFall } = EP;
   const loyaltyK = loyalty ? EP.loyalty.v : 0;
   const stride = Math.max(1, (model.live / 4000) | 0);
   let seen = 0;
@@ -724,9 +720,12 @@ export function runElection(model, { loyalty = true, seed = 1 } = {}) {
     const headSide = head === i ? own : (model.a[head] > 0.5 ? 1 : 0);
     const share = clamp((1 - grip) * own + grip * headSide, 0, 1);
 
-    const conviction = Math.abs(model.a[i] - 0.5) * 2;
-    const willing = apathy.v + (convinced.v - apathy.v) * conviction;
-    const turnout = clamp(willing + mobilise.v * grip * (1 - willing), 0.01, 1);
+    // Answering to nobody, only conviction brings you out. Answering to someone, what brings
+    // you out is standing near enough to them to matter: parity votes, domination does not.
+    const parent = model.parentOf(i);
+    const turnout = parent < 0
+      ? Math.abs(model.a[i] - 0.5) * 2
+      : Math.pow(Math.min(1, model.e[i] / Math.max(1e-9, model.e[parent])), parityFall.v);
     const votes = turnout;   // every station carries the same electorate
     const bin = Math.min(BINS - 1, (turnout * BINS) | 0);
     red[bin] += votes * share;
