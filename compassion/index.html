@@ -209,12 +209,7 @@ button.wide { width: 100%; }
   </div>
 
   <div class="group">
-    <h3>Presets</h3>
-    <div class="row">
-      <button data-preset="compassionate">Compassionate</button>
-      <button data-preset="ruthless">Ruthless</button>
-      <button data-preset="purge">Over-repressive</button>
-    </div>
+    <h3>Run</h3>
     <div class="ctl" style="margin-top:8px">
       <label for="p-draw"><span>Draw every</span><span id="v-draw"></span></label>
       <input type="range" id="p-draw" min="1" max="30" step="1" value="1">
@@ -629,10 +624,10 @@ function initDebugPanel() {
 }
 
 // ============================================================================
-// Wiring: loop, controls, presets
+// Wiring: loop and controls
 // ============================================================================
 
-/** Wiring: the loop, the controls and the presets. */
+/** Wiring: the loop and the controls. */
 
 
 
@@ -646,12 +641,6 @@ const STEPS_PER_FRAME = 1;
 
 /** Bump whenever a parameter's meaning or range changes, so stored values cannot outlive it. */
 const SCHEMA = 2;
-
-const PRESETS = {
-  compassionate: { compassion: 0.78, lambda: 0.25, theta: 0.6, surcharge: 0.35, influenceK: 0.12 },
-  ruthless:      { compassion: 0.10, lambda: 0.25, theta: 0.6, surcharge: 0.35, influenceK: 0.12 },
-  purge:         { compassion: 0.04, lambda: 0.25, theta: 0.28, surcharge: 1.4, influenceK: 0.25 },
-};
 
 const config = new Config('compassion');
 const model = new Model();
@@ -695,9 +684,6 @@ document.getElementById('btn-pause').onclick = e => {
 document.getElementById('btn-reset').onclick = () => { model.reset(); hold(); };
 document.getElementById('btn-debug').onclick = () => debugPanel.toggle();
 document.getElementById('opt-control').onchange = hold;
-for (const b of document.querySelectorAll('[data-preset]')) {
-  b.onclick = () => applyPreset(b.dataset.preset);
-}
 
 /** One slider per parameter, so a rule and its control cannot disagree. */
 function buildControls(host, params, keep) {
@@ -741,18 +727,6 @@ function syncHero() {
   document.getElementById('p-compassion').value = P.compassion.v;
   document.getElementById('v-compassion').textContent = P.compassion.v.toFixed(2);
   document.getElementById('m-compassion').style.width = `${P.compassion.v * 100}%`;
-}
-
-function applyPreset(name) {
-  for (const [k, v] of Object.entries(PRESETS[name])) P[k].v = v;
-  syncHero();
-  for (const key in P) {
-    const input = document.getElementById(`x-${key}`);
-    if (input) { input.value = P[key].v; setLabel(key, P[key].v); }
-  }
-  persist();
-  hold();
-  dbg.info(`preset ${name}`);
 }
 
 function hold() {
