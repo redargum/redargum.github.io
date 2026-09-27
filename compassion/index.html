@@ -201,10 +201,9 @@ button.wide { width: 100%; }
   </div>
 
   <div class="group">
-    <h3>Election</h3>
+    <h3>If an election were held now</h3>
     <label class="check"><input type="checkbox" id="opt-control" checked>
       Overlay the counterfactual where everyone votes for themselves</label>
-    <div class="row"><button id="btn-vote" class="wide">Hold an election now</button></div>
     <div id="stats"></div>
   </div>
 
@@ -634,7 +633,6 @@ function initDebugPanel() {
 
 
 
-const ELECTION_EVERY = 6;
 
 /** Steps advanced per frame. Fixed: the field is only legible at one rate. */
 const STEPS_PER_FRAME = 1;
@@ -666,7 +664,6 @@ const rate = { steps: 0, frames: 0, since: performance.now(), stepsPerSec: 0, fp
 let paused = false;
 let result = null;
 let control = null;
-let sinceVote = 0;
 let electionSeed = 1;
 
 buildControls(document.getElementById('g-model'), P, k => k !== 'compassion' && k !== 'drag');
@@ -675,7 +672,6 @@ bindHero();
 restore();
 hold();
 
-document.getElementById('btn-vote').onclick = hold;
 document.getElementById('btn-pause').onclick = e => {
   paused = !paused;
   e.target.textContent = paused ? 'Resume' : 'Pause';
@@ -735,7 +731,6 @@ function hold() {
   control = document.getElementById('opt-control').checked
     ? runElection(model, { loyalty: false, seed: electionSeed })
     : null;
-  sinceVote = 0;
   view.drawHistogram(result, control);
   view.drawScatter(result);
   document.getElementById('ro-hist').textContent =
@@ -823,10 +818,7 @@ function frame(now) {
 
   if (drawing) view.drawNetwork(model);
 
-  if (drawing) renderStats();
-
-  sinceVote += dt;
-  if (sinceVote >= ELECTION_EVERY) hold();
+  if (drawing) { hold(); renderStats(); }
 }
 requestAnimationFrame(frame);
 
