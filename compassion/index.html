@@ -1078,11 +1078,13 @@ class View {
     ctx.fill(heads);
 
     const paths = Array.from({ length: BUCKETS }, () => new Path2D());
+    let spoiled = 0;
     for (let i = 0; i < CAP; i++) {
       if (!alive[i]) continue;
+      const cx = ox + x[i] * s, cy = oy + y[i] * s;
+      if (!Number.isFinite(cx + cy + a[i] + e[i])) { spoiled++; continue; }
       const k = Math.round(clamp(a[i], 0, 1) * (BUCKETS - 1));
       const r = Math.max(0.7, radius(e[i]) * s);
-      const cx = ox + x[i] * s, cy = oy + y[i] * s;
       paths[k].moveTo(cx + r, cy);
       paths[k].arc(cx, cy, r, 0, Math.PI * 2);
     }
@@ -1090,6 +1092,7 @@ class View {
       ctx.fillStyle = this.ramp[k];
       ctx.fill(paths[k]);
     }
+    if (spoiled && !this.warned) { this.warned = true; dbg.error(`${spoiled} cells are not finite`); }
   }
 
   /** Votes over turnout, one filled curve per party, with the counterfactual as an outline. */
@@ -1420,6 +1423,9 @@ function initDebugPanel() {
 
 const ELECTION_EVERY = 6;
 
+/** Bump whenever a parameter's meaning or range changes, so stored values cannot outlive it. */
+const SCHEMA = 2;
+
 const PRESETS = {
   compassionate: { compassion: 0.78, lambda: 0.25, theta: 0.6, surcharge: 0.35, influenceK: 0.12 },
   ruthless:      { compassion: 0.10, lambda: 0.25, theta: 0.6, surcharge: 0.35, influenceK: 0.12 },
@@ -1611,7 +1617,7 @@ function advanceSweep() {
 }
 
 function persist() {
-  const out = { model: {}, election: {} };
+  const out = { schema: SCHEMA, model: {}, election: {} };
   for (const k in P) out.model[k] = P[k].v;
   for (const k in EP) out.election[k] = EP[k].v;
   config.save(out);
@@ -1620,8 +1626,19 @@ function persist() {
 function restore() {
   const saved = config.load();
   if (!saved) return;
-  for (const k in saved.model ?? {}) if (P[k]) P[k].v = saved.model[k];
-  for (const k in saved.election ?? {}) if (EP[k]) EP[k].v = saved.election[k];
+  if (saved.schema !== SCHEMA) {
+    config.clear();
+    dbg.info('discarded a saved config from an older schema', { was: saved.schema ?? 'unversioned' });
+    return;
+  }
+  for (const [params, stored] of [[P, saved.model], [EP, saved.election]]) {
+    for (const k in stored ?? {}) {
+      const p = params[k];
+      if (!p) continue;
+      const v = Number(stored[k]);
+      if (Number.isFinite(v) && v >= p.min && v <= p.max) p.v = v;
+    }
+  }
   model.applyCompassion();
   syncHero();
   for (const [params, prefix] of [[P, 'x-'], [EP, 'x-']]) {
