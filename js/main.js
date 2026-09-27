@@ -6,7 +6,6 @@ import { initRules } from './rules.js';
 import { Config } from './config.js';
 import { dbg, initDebugPanel } from './debug.js';
 
-const SIM_HZ = 30;
 const ELECTION_EVERY = 6;
 
 const PRESETS = {
@@ -66,7 +65,6 @@ document.getElementById('btn-reset').onclick = () => { model.reset(); sweepPoint
 document.getElementById('btn-debug').onclick = () => debugPanel.toggle();
 document.getElementById('btn-sweep').onclick = startSweep;
 document.getElementById('opt-control').onchange = hold;
-document.getElementById('opt-quotas').onchange = hold;
 for (const b of document.querySelectorAll('[data-preset]')) {
   b.onclick = () => applyPreset(b.dataset.preset);
 }
@@ -130,18 +128,17 @@ function applyPreset(name) {
 }
 
 function hold() {
-  const quotas = document.getElementById('opt-quotas').checked;
   electionSeed++;
-  result = runElection(model, { enforcement: true, quotas, seed: electionSeed });
+  result = runElection(model, { loyalty: true, seed: electionSeed });
   control = document.getElementById('opt-control').checked
-    ? runElection(model, { enforcement: false, quotas, seed: electionSeed })
+    ? runElection(model, { loyalty: false, seed: electionSeed })
     : null;
   sinceVote = 0;
   view.drawHistogram(result, control);
   view.drawScatter(result);
   view.drawSweep(sweepPoints, P.compassion.v);
   document.getElementById('ro-hist').textContent =
-    `mainstream ${(result.mainShare * 100).toFixed(1)}% · administrative ${(result.adminShare * 100).toFixed(1)}%`;
+    `incumbent ${(result.mainShare * 100).toFixed(1)}% · bloc vote ${(result.blocShare * 100).toFixed(1)}%`;
   renderStats();
 }
 
@@ -149,9 +146,10 @@ function renderStats() {
   const s = model.stats();
   document.getElementById('stats').innerHTML = [
     ['Stations', result ? result.stations : 0],
-    ['Mainstream by preference', `${(100 * s.main / Math.max(1, s.live)).toFixed(0)}%`],
-    ['Mainstream reported', result ? `${(result.mainShare * 100).toFixed(1)}%` : '—'],
-    ['Administrative share', result ? `${(result.adminShare * 100).toFixed(1)}%` : '—'],
+    ['Incumbent by preference', `${(100 * s.main / Math.max(1, s.live)).toFixed(0)}%`],
+    ['Incumbent reported', result ? `${(result.mainShare * 100).toFixed(1)}%` : '—'],
+    ['Bloc vote', result ? `${(result.blocShare * 100).toFixed(1)}%` : '—'],
+    ['Captured cells', result ? `${(100 * result.captured / Math.max(1, result.stations)).toFixed(0)}%` : '—'],
     ['Largest cell', s.eMax.toFixed(0)],
     ['Destroyed', s.destroyed],
     ['Divided', s.divided],
@@ -177,15 +175,15 @@ function advanceSweep() {
     syncHero();
   }
   const chunk = Math.max(10, Number(speedInput.value) * 3);
-  for (let k = 0; k < chunk; k++) model.step(1 / SIM_HZ);
+  for (let k = 0; k < chunk; k++) model.step();
   job.settle += chunk;
   if (job.settle < 150) return;
 
-  const r = runElection(model, { enforcement: true, quotas: false, seed: 99 });
-  sweepPoints.push({ c: job.c, admin: r.adminShare });
+  const r = runElection(model, { loyalty: true, seed: 99 });
+  sweepPoints.push({ c: job.c, admin: r.blocShare });
   sweepPoints.sort((a, b) => a.c - b.c);
   view.drawSweep(sweepPoints, P.compassion.v);
-  document.getElementById('ro-sweep').textContent = `c=${job.c.toFixed(2)} · ${(r.adminShare * 100).toFixed(1)}%`;
+  document.getElementById('ro-sweep').textContent = `c=${job.c.toFixed(2)} · ${(r.blocShare * 100).toFixed(1)}%`;
 
   job.settle = 0;
   job.c = Math.round((job.c - 0.05) * 100) / 100;
@@ -226,7 +224,7 @@ function fmt(v) {
   return Math.abs(v) >= 100 ? v.toFixed(0) : Math.abs(v) >= 1 ? v.toFixed(2) : v.toFixed(3);
 }
 
-let acc = 0, last = performance.now(), frameNo = 0;
+let last = performance.now(), frameNo = 0;
 function frame(now) {
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
@@ -239,13 +237,8 @@ function frame(now) {
   if (sweepJob) { advanceSweep(); if (drawing) view.drawNetwork(model); return; }
   if (paused) return;
 
-  acc += dt * Number(speedInput.value);
-  const stepDt = 1 / SIM_HZ;
-  let steps = 0;
-  const budget = Math.max(1, Math.min(400, Math.round(dt * SIM_HZ * Number(speedInput.value)) + 1));
-  while (acc >= stepDt && steps < budget) { model.step(stepDt); acc -= stepDt; steps++; }
-  if (steps === 0) return;
-  acc = Math.min(acc, stepDt);
+  const steps = Number(speedInput.value);
+  for (let k = 0; k < steps; k++) model.step();
 
   rate.steps += steps;
   rate.frames++;

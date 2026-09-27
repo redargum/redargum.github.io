@@ -166,8 +166,8 @@ export class View {
     ctx.restore();
 
     this.legend(ctx, pad.l + iw - 148, pad.t + 12, [
-      [css('--main'), 'mainstream'],
-      [css('--opp'), 'opposition'],
+      [css('--main'), 'incumbent'],
+      [css('--opp'), 'challenger'],
     ]);
   }
 
@@ -193,7 +193,7 @@ export class View {
     ctx.translate(10, pad.t + ih / 2);
     ctx.rotate(-Math.PI / 2);
     ctx.textAlign = 'center';
-    ctx.fillText('mainstream share', 0, 0);
+    ctx.fillText('incumbent share', 0, 0);
     ctx.restore();
   }
 
@@ -231,7 +231,7 @@ export class View {
     ctx.arc(px(last.c), py(last.admin), 3, 0, Math.PI * 2);
     ctx.fill();
     ctx.textAlign = last.c > 0.5 ? 'right' : 'left';
-    ctx.fillText('administrative share', px(last.c) + (last.c > 0.5 ? -8 : 8), py(last.admin) - 6);
+    ctx.fillText('bloc vote', px(last.c) + (last.c > 0.5 ? -8 : 8), py(last.admin) - 6);
 
     if (live) {
       ctx.strokeStyle = 'rgba(255,255,255,.18)';

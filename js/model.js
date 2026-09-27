@@ -24,29 +24,32 @@ const PHI_INV = 0.618;
 export const P = {
   compassion:  { v: 0.10, min: 0,    max: 1,    step: 0.01,  label: 'Compassion' },
   cSpread:     { v: 0.10, min: 0,    max: 0.4,  step: 0.01,  label: 'Compassion spread' },
-  drain:       { v: 0.60, min: 0,    max: 3,    step: 0.01,  label: 'Drain along sticks' },
+  drain:       { v: 0.020, min: 0, max: 0.2, step: 0.001, label: 'Drain per stick' },
   divide:      { v: 5.0, min: 1.5, max: 30, step: 0.1, label: 'Division threshold (x mean)' },
   starve:      { v: 0.15, min: 0.01, max: 1, step: 0.01, label: 'Starvation floor (x mean)' },
-  influx:      { v: 260,  min: 10,   max: 2000, step: 10,    label: 'Total energy per second' },
-  upkeep:      { v: 0.55, min: 0.02, max: 3,    step: 0.01,  label: 'Upkeep per second' },
+  influx:      { v: 9.0, min: 0.5, max: 60, step: 0.5, label: 'Total energy per step' },
+  upkeep:      { v: 0.018, min: 0.001, max: 0.1, step: 0.001, label: 'Upkeep' },
   metabolic:   { v: 0.75, min: 0.5,  max: 1,    step: 0.01,  label: 'Metabolic exponent' },
-  repel:       { v: 220,  min: 0,    max: 900,  step: 5,     label: 'Cell repulsion' },
-  stick:       { v: 5.2,  min: 0,    max: 20,   step: 0.1,   label: 'Stick stiffness' },
-  drag:        { v: 3.4,  min: 0.5,  max: 10,   step: 0.1,   label: 'Drag' },
-  hunt:        { v: 90,   min: 0,    max: 400,  step: 5,     label: 'Hunt / flee force' },
+  repel:       { v: 0.25, min: 0, max: 2, step: 0.01, label: 'Cell repulsion' },
+  stick:       { v: 0.006, min: 0, max: 0.05, step: 0.0005, label: 'Stick stiffness' },
+  drag:        { v: 0.11, min: 0.01, max: 0.6, step: 0.01, label: 'Drag' },
+  hunt:        { v: 0.10, min: 0, max: 1, step: 0.01, label: 'Hunt / flee force' },
   influenceR:  { v: 30,   min: 10,   max: 70,   step: 1,     label: 'Enforcement radius' },
-  influenceK:  { v: 0.12, min: 0,    max: 1,    step: 0.005, label: 'Enforcement strength' },
-  influenceC:  { v: 0.002, min: 0,    max: 0.4,  step: 0.005, label: 'Enforcement cost' },
+  influenceK:  { v: 0.040, min: 0, max: 0.3, step: 0.001, label: 'Media strength' },
+  influenceC:  { v: 0.0001, min: 0, max: 0.01, step: 0.0001, label: 'Media cost' },
   theta:       { v: 0.30, min: 0.02, max: 1,    step: 0.01,  label: 'Destruction threshold' },
   absorbFloor: { v: PHI_INV, min: 0.05, max: 1, step: 0.01, label: 'Absorption floor' },
   surcharge:   { v: 0.35, min: 0,    max: 2,    step: 0.05,  label: 'Destruction surcharge' },
-  lambda:      { v: 0.12, min: 0,    max: 3,    step: 0.01,  label: 'Neglect drift' },
+  lambda:      { v: 0.004, min: 0, max: 0.05, step: 0.0005, label: 'Neglect drift' },
   povRef:      { v: 0.90, min: 0.1, max: 8, step: 0.1, label: 'Neglect reference (x mean)' },
   recruitR:    { v: 22,   min: 6,    max: 60,   step: 1,     label: 'Recruitment radius' },
   recruitMin:  { v: 0.40, min: 0.05, max: 6, step: 0.05, label: 'Recruitment minimum (x mean)' },
   fanout:      { v: 3.0,  min: 1,    max: 12,   step: 0.5,   label: 'Children per unit size' },
+  breakFree:   { v: 1.20, min: 1,    max: 4,    step: 0.05,  label: 'Break-free ratio' },
+  mediaTop:    { v: 14,   min: 0,    max: 60,   step: 1,     label: 'Broadcasters' },
+  mediaR:      { v: 130,  min: 20,   max: 400,  step: 5,     label: 'Broadcast reach' },
+  mediaK:      { v: 0.022,min: 0,    max: 0.2,  step: 0.001, label: 'Broadcast strength' },
   recruitGap:  { v: 0.45, min: 0.05, max: 1,    step: 0.05,  label: 'Recruitment tolerance' },
-  noise:       { v: 0.06, min: 0,    max: 0.3,  step: 0.005, label: 'Alignment noise' },
   mutate:      { v: 0.03, min: 0,    max: 0.3,  step: 0.005, label: 'Division mutation' },
   erosion:     { v: 0,    min: 0,    max: 1,    step: 1,     label: 'Compassion erosion' },
 };
@@ -54,23 +57,27 @@ export const P = {
 /** One line per rule; `text` reads live values out of `P`, so the panel cannot go stale. */
 export const RULES = [
   { name: 'Cells and sticks', keys: ['repel', 'stick', 'drag'],
-    text: () => 'A node is a cell with energy, inertia and one alignment number, 0 for opposition and 1 for mainstream. Cells repel in proportion to their energy; a stick between two of them resists that repulsion with the smaller of the two energies. Nothing sits on a lattice — position is an outcome.' },
+    text: () => 'A node is a cell with energy, inertia and one alignment number, 0 for the challenger and 1 for the incumbent. Cells repel in proportion to their energy; a stick between two of them resists that repulsion with the smaller of the two energies. Nothing sits on a lattice — position is an outcome.' },
   { name: 'Energy runs uphill', keys: ['drain', 'compassion'],
     text: () => 'Every stick moves a fixed quantum of energy per second between its two cells, and the compassion of the larger one sets the direction: below 0.5 it takes from the smaller, above 0.5 it gives. Extraction and redistribution are the same rule with the sign reversed. This is the whole concentration mechanism: tribute flows toward whoever already has more.' },
   { name: 'Compassion', keys: ['compassion', 'cSpread'],
     text: () => 'Which way a cell sends energy across its sticks. Below 0.5 it takes from whoever has less and the distribution goes heavy-tailed; above 0.5 it gives, and holdings level out. This one parameter decides whether the election grows a tail.' },
   { name: 'The center is emergent', keys: [],
     text: () => 'No node is designated. The head of a structure is whichever cell holds the most energy, and it changes hands when another overtakes it.' },
+  { name: 'Breaking free', keys: ['breakFree'],
+    text: () => 'A cell that grows past this multiple of its parent\u2019s size cuts the stick and stands on its own. No hierarchy can grow without limit: whoever the cascade makes strong stops being anyone\u2019s subordinate.' },
   { name: 'Recruitment', keys: ['recruitR', 'recruitMin', 'recruitGap', 'fanout'],
     text: () => 'A cell attaches the nearest unattached poorer cell of roughly its own views, up to a fanout that grows with its size. Absorbing in Kosmiki joins the victim on rather than deleting it, and this is the only thing that creates a stick.' },
   { name: 'Division', keys: ['divide', 'mutate'],
     text: () => 'Past a multiple of the mean cell size a cell splits. The child keeps the parent’s views with a small mutation, the energy is halved between them, and the two start joined by a stick. Structures grow rather than being placed.' },
   { name: 'Income, upkeep and starvation', keys: ['influx', 'upkeep', 'metabolic', 'starve'],
     text: () => 'A fixed total income each second is split equally between every living cell, every cell pays upkeep on what it holds, and one that falls below the floor dies. Upkeep rises more slowly than size, as real metabolism does, so being large is cheaper per unit held \u2014 the economy of scale that lets a drained-from hierarchy run away from the cells feeding it.' },
-  { name: 'Enforcement', keys: ['influenceR', 'influenceK', 'influenceC'],
+  { name: 'Mass media', keys: ['mediaTop', 'mediaR', 'mediaK'],
+    text: () => 'The largest cells broadcast their alignment across a radius far beyond their own neighbourhood. Few transmitters with wide reach is what separates propaganda from conformity, and it is what makes holding the apparatus worth having: the pull is toward the broadcaster, not toward the local average.' },
+  { name: 'Word of mouth', keys: ['influenceR', 'influenceK', 'influenceC'],
     text: () => 'A cell spends energy to pull the alignment of every neighbour in its radius toward its own, with force rising with its energy and with <code>1 - c</code>: a compassionate cell persuades weakly, a ruthless one coerces. What a cell registers as pressure is that force divided by its own energy: domination is force measured against the ability to resist it, so the same push lands hard on a destitute neighbour and glances off a rich one.' },
-  { name: 'Neglect breeds opposition', keys: ['lambda', 'povRef', 'noise'],
-    text: () => 'A cell near the starvation floor drifts toward opposition. Because energy runs uphill, the periphery is always the poorest, so it defects without anyone deciding it should. The opposition is a product of the structure, not an input to it.' },
+  { name: 'Neglect breeds dissent', keys: ['lambda', 'povRef'],
+    text: () => 'A cell near the starvation floor turns against the side its own patron belongs to. Because energy runs uphill the periphery is always the poorest, so it defects without anyone deciding it should \u2014 and because it defects from whoever rules it rather than toward a fixed side, neither side is a trap the other can never escape.' },
   { name: 'Destruction', keys: ['theta', 'surcharge', 'absorbFloor'],
     text: () => `A cell destroys a near opponent when the alignment gap exceeds <code>theta / (1 - c)</code>, when it holds more energy, and when the victim holds at least the absorption floor of the attacker's energy — you cannot eat something far beneath you, which is why hierarchies have to grow intermediate layers. The attacker pays the victim's full energy plus the surcharge.` },
   { name: 'Hunting', keys: ['hunt'],
@@ -97,11 +104,11 @@ export class Model {
     this.pgen = new Int32Array(CAP);
     this.gen = new Int32Array(CAP);
     this.voters = new Float32Array(CAP);
-    this.enf = new Float32Array(CAP);
     this.alive = new Uint8Array(CAP);
     this.dA = new Float32Array(CAP);
     this.kids = new Int32Array(CAP);
     this.flow = new Float32Array(CAP);
+    this.top = new Int32Array(64);
 
     this.free = new Int32Array(CAP);
     this.freeTop = 0;
@@ -149,7 +156,6 @@ export class Model {
     this.parent[i] = -1;
     this.gen[i]++;
     this.voters[i] = Math.exp(6.0 + gauss(this.rng) * 0.8);
-    this.enf[i] = 0;
     this.alive[i] = 1;
     this.live++;
     return i;
@@ -183,24 +189,26 @@ export class Model {
     }
   }
 
-  step(dt) {
-    this.time += dt;
+  step() {
+    this.time += 1;
     const cell = Math.max(P.influenceR.v, 24);
     if (this.grid.cell !== cell) this.grid = new Grid(WORLD_W, WORLD_H, cell, CAP);
     this.grid.rebuild(this.x, this.y, this.alive, CAP);
 
-    this.forcePass(dt);
-    this.drainPass(dt);
-    this.influencePass(dt);
-    this.alignPass(dt);
+    this.forcePass();
+    this.breakFreePass();
+    this.drainPass();
+    this.influencePass();
+    this.broadcastPass();
+    this.alignPass();
     this.recruitPass();
     this.destroyPass();
     this.dividePass();
-    this.incomePass(dt);
+    this.incomePass();
   }
 
   /** Repulsion, stick tension, hunting and drag, integrated with inertia. */
-  forcePass(dt) {
+  forcePass() {
     const { x, y, vx, vy, e, a, parent, alive } = this;
     const R = P.influenceR.v, R2 = R * R;
     const krep = P.repel.v, kstick = P.stick.v, khunt = P.hunt.v;
@@ -233,9 +241,9 @@ export class Model {
         fx += f * dx; fy += f * dy;
       }
       const m = Math.max(0.4, ei);
-      vx[i] = (vx[i] + fx / m * dt) * Math.max(0, 1 - P.drag.v * dt);
-      vy[i] = (vy[i] + fy / m * dt) * Math.max(0, 1 - P.drag.v * dt);
-      let nx = xi + vx[i] * dt, ny = yi + vy[i] * dt;
+      vx[i] = (vx[i] + fx / m) * (1 - P.drag.v);
+      vy[i] = (vy[i] + fy / m) * (1 - P.drag.v);
+      let nx = xi + vx[i], ny = yi + vy[i];
       if (nx < 2) { nx = 2; vx[i] = -vx[i] * 0.4; }
       if (nx > WORLD_W - 2) { nx = WORLD_W - 2; vx[i] = -vx[i] * 0.4; }
       if (ny < 2) { ny = 2; vy[i] = -vy[i] * 0.4; }
@@ -244,8 +252,18 @@ export class Model {
     }
   }
 
+  /** A child that outgrows its parent past the ratio cuts the stick and stands on its own. */
+  breakFreePass() {
+    const { e, alive } = this;
+    for (let i = 0; i < CAP; i++) {
+      if (!alive[i]) continue;
+      const p = this.parentOf(i);
+      if (p >= 0 && e[i] > P.breakFree.v * e[p]) this.parent[i] = -1;
+    }
+  }
+
   /** Each stick moves energy from the smaller cell to the larger, held back by compassion. */
-  drainPass(dt) {
+  drainPass() {
     const { e, c, parent, alive, flow } = this;
     flow.fill(0);
     for (let i = 0; i < CAP; i++) {
@@ -254,7 +272,7 @@ export class Model {
       if (p < 0) continue;
       const lo = e[i] < e[p] ? i : p;
       const hi = lo === i ? p : i;
-      const rate = P.drain.v * (1 - 2 * c[hi]) * dt;
+      const rate = P.drain.v * (1 - 2 * c[hi]);
       const amount = rate > 0 ? Math.min(e[lo], rate) : -Math.min(e[hi], -rate);
       flow[lo] -= amount;
       flow[hi] += amount;
@@ -264,14 +282,10 @@ export class Model {
     }
   }
 
-  influencePass(dt) {
-    const { x, y, a, e, c, enf, alive, dA } = this;
+  influencePass() {
+    const { x, y, a, e, c, alive, dA } = this;
     dA.fill(0);
     const R = P.influenceR.v, R2 = R * R, k = P.influenceK.v;
-    for (let i = 0; i < CAP; i++) {
-      if (!alive[i]) continue;
-      enf[i] *= Math.max(0, 1 - 0.6 * dt);
-    }
     for (let i = 0; i < CAP; i++) {
       if (!alive[i]) continue;
       const infl = (1 - c[i]) * e[i];
@@ -284,22 +298,66 @@ export class Model {
         const d2 = dx * dx + dy * dy;
         if (d2 > R2) return;
         const w = 1 - d2 / R2;
-        dA[j] += k * infl * w * (ai - a[j]) * dt;
-        if (ai > 0.5) enf[j] += infl * w * dt / (1 + e[j]);
+        dA[j] += k * infl * w * (ai - a[j]);
         spent += w;
       });
-      e[i] = Math.max(0, e[i] - P.influenceC.v * infl * spent * dt);
+      e[i] = Math.max(0, e[i] - P.influenceC.v * infl * spent);
     }
   }
 
-  alignPass(dt) {
-    const { a, e, alive, dA, rng } = this;
-    const lam = P.lambda.v, nz = P.noise.v;
+  /**
+   * Mass media: the largest cells project alignment far beyond their own neighbourhood, while
+   * the local term reaches only as far as a cell can see. Few transmitters with wide reach is
+   * what makes this propaganda rather than conformity, and it is why holding the apparatus is
+   * worth anything — the pull is toward the broadcaster, not toward the local average.
+   */
+  broadcastPass() {
+    const { x, y, a, e, c, alive, dA, top } = this;
+    const k = Math.min(P.mediaTop.v | 0, top.length);
+    if (k === 0) return;
+
+    let n = 0;
     for (let i = 0; i < CAP; i++) {
       if (!alive[i]) continue;
-      let v = a[i] + dA[i] + gauss(rng) * nz * dt;
+      if (n < k) {
+        top[n++] = i;
+        if (n === k) sortTop(top, e, n);
+      } else if (e[i] > e[top[k - 1]]) {
+        top[k - 1] = i;
+        sortTop(top, e, k);
+      }
+    }
+    if (n === 0) return;
+
+    const R = P.mediaR.v, R2 = R * R, strength = P.mediaK.v, mean = Math.max(1e-6, this.meanE);
+    for (let t = 0; t < n; t++) {
+      const i = top[t];
+      if (!alive[i]) continue;
+      const reach = (1 - c[i]) * (e[i] / mean);
+      if (reach < 0.05) continue;
+      const xi = x[i], yi = y[i], ai = a[i];
+      for (let j = 0; j < CAP; j++) {
+        if (!alive[j] || j === i) continue;
+        const dx = x[j] - xi, dy = y[j] - yi;
+        const d2 = dx * dx + dy * dy;
+        if (d2 > R2) continue;
+        const w = 1 - d2 / R2;
+        dA[j] += strength * reach * w * (ai - a[j]);
+      }
+    }
+  }
+
+  alignPass() {
+    const { a, e, alive, dA } = this;
+    const lam = P.lambda.v;
+    for (let i = 0; i < CAP; i++) {
+      if (!alive[i]) continue;
+      let v = a[i] + dA[i];
       const poverty = 1 - e[i] / (P.povRef.v * this.meanE);
-      if (poverty > 0) v -= lam * poverty * dt;
+      if (poverty > 0) {
+        const patron = this.parentOf(i);
+        if (patron >= 0) v += lam * poverty * (a[patron] > 0.5 ? -1 : 1);
+      }
       a[i] = clamp(v, 0, 1);
     }
   }
@@ -389,10 +447,10 @@ export class Model {
    * A fixed total income is split equally between the living, so each new cell lowers what
    * every cell receives. The population has no ceiling; it settles where income meets losses.
    */
-  incomePass(dt) {
+  incomePass() {
     const { e, alive, rng } = this;
-    const share = this.live > 0 ? P.influx.v * dt / this.live : 0;
-    const rate = P.upkeep.v * dt, exp = P.metabolic.v;
+    const share = this.live > 0 ? P.influx.v / this.live : 0;
+    const rate = P.upkeep.v, exp = P.metabolic.v;
     const floor = P.starve.v * this.meanE;
     let sum = 0;
     for (let i = 0; i < CAP; i++) {
@@ -406,6 +464,17 @@ export class Model {
       if (i < 0) break;
       this.a[i] = 0.5 + (rng() - 0.5) * 0.2;
     }
+  }
+
+  /** The head of i's structure: follow the sticks up until nobody is above. */
+  headOf(i) {
+    let cur = i;
+    for (let hop = 0; hop < 64; hop++) {
+      const p = this.parentOf(cur);
+      if (p < 0) return cur;
+      cur = p;
+    }
+    return cur;
   }
 
   stats() {
@@ -422,6 +491,15 @@ export class Model {
       compassion: cSum / Math.max(1, this.live),
       destroyed: this.destroyed, divided: this.divided,
     };
+  }
+}
+
+function sortTop(top, e, n) {
+  for (let a = 1; a < n; a++) {
+    const v = top[a], ev = e[v];
+    let b = a - 1;
+    while (b >= 0 && e[top[b]] < ev) { top[b + 1] = top[b]; b--; }
+    top[b + 1] = v;
   }
 }
 

@@ -1,60 +1,69 @@
 /**
- * Polling stations read off the model, and the two curves Shpilkin's method compares.
+ * An honest election, and the two curves Shpilkin's method compares.
  *
- * Every election draws its baseline noise from a seeded generator, so re-running with
- * enforcement switched off changes only the enforcement term and the two results are
- * comparable station by station.
+ * Nobody falsifies anything here. Every vote is cast willingly and counted as cast. The tail
+ * comes from loyalty instead: a cell inside a structure votes the way its head does, the more
+ * so the further the head towers over it, and it turns out to vote because the structure gets
+ * it to the polls. A cell answering to nobody votes its own preference at ordinary turnout.
+ * A landscape of big hierarchies therefore delivers near-unanimous blocks at high turnout,
+ * while free cells produce a normal core — which is the whole of the Shpilkin picture.
+ *
+ * Baseline turnout noise is drawn from a seeded generator, so re-running with loyalty off
+ * changes only the loyalty term and the two results are comparable station by station.
  */
 import { CAP, clamp, mulberry32, gauss } from './model.js';
 
 export const BINS = 50;
 
 export const EP = {
-  baseTurnout: { v: 0.44, min: 0.1,  max: 0.9,  step: 0.01,  label: 'Baseline turnout' },
-  turnoutSd:   { v: 0.09, min: 0.01, max: 0.3,  step: 0.005, label: 'Turnout spread' },
+  baseTurnout: { v: 0.42, min: 0.1,  max: 0.9,  step: 0.01,  label: 'Baseline turnout' },
+  turnoutSd:   { v: 0.10, min: 0.01, max: 0.3,  step: 0.005, label: 'Turnout spread' },
   temp:        { v: 0.16, min: 0.02, max: 0.8,  step: 0.01,  label: 'Preference sharpness' },
-  beta:        { v: 0.45, min: 0,    max: 1,    step: 0.01,  label: 'Mobilization by enforcement' },
-  beta2:       { v: 0.80, min: 0,    max: 1,    step: 0.01,  label: 'Inflation by enforcement' },
-  enfRef:      { v: 4.0,  min: 0.1,  max: 40,   step: 0.1,   label: 'Enforcement reference (x mean)' },
-  roundFrom:   { v: 0.45, min: 0,    max: 1,    step: 0.01,  label: 'Quota threshold' },
+  loyalty:     { v: 0.95, min: 0,    max: 1,    step: 0.01,  label: 'Loyalty to the head' },
+  mobilise:    { v: 0.50, min: 0,    max: 1,    step: 0.01,  label: 'Turnout the structure adds' },
 };
 
 export const ELECTION_RULES = [
-  { name: 'Turnout', keys: ['baseTurnout', 'turnoutSd', 'beta'],
-    text: () => 'Each station draws a turnout around the baseline, raised by the enforcement it received. Stations under pressure are mobilized as well as inflated, which is why the anomaly shows up along the turnout axis at all.' },
-  { name: 'Reported share', keys: ['temp', 'beta2'],
-    text: () => 'The honest share is a logistic of the station’s alignment above the midpoint. Enforcement pushes it the rest of the way toward 1, so the reported result parts company with the preference underneath it.' },
-  { name: 'Enforcement reference', keys: ['enfRef'],
-    text: () => 'Received enforcement is divided by this multiple of the mean cell size and capped at 1. Mean size only fixes the units; measuring against the spread of enforcement itself would cancel the very change in pressure the sweep exists to show.' },
-  { name: 'Quotas', keys: ['roundFrom'],
-    text: () => 'Off by default. Above the threshold a station is working to a target, so its share snaps to the nearest 5%. This is what produces the comb of spikes at 70, 75 and 80% in real returns; it is left off so the tail cannot be blamed on the rounding.' },
+  { name: 'Nobody cheats', keys: [],
+    text: () => 'Every vote is cast willingly and counted as cast. There is no stuffing, no inflation and no quota. Whatever shape the returns take, the mechanism producing it is social, not criminal.' },
+  { name: 'Capture', keys: ['loyalty'],
+    text: () => 'A cell votes the way the head of its structure does, in proportion to how far that head towers over it — <code>e_head / (e_head + e_self)</code>. Someone answering to nobody votes their own preference. Loyalty scales the whole effect, and at zero everyone votes for themselves.' },
+  { name: 'Mobilization', keys: ['baseTurnout', 'turnoutSd', 'mobilise'],
+    text: () => 'A captured cell is likelier to vote at all, because the structure gets it to the polls. Turnout and unanimity therefore rise together, which is why the anomaly appears along the turnout axis rather than anywhere else.' },
+  { name: 'Preference', keys: ['temp'],
+    text: () => 'Left alone, a cell votes a logistic of how far its own alignment sits above the midpoint. Sharpness sets how decisively a mild preference becomes a vote.' },
 ];
 
 /**
  * @returns {{main:Float64Array, opp:Float64Array, scatter:Float32Array, points:number,
- *   totalVotes:number, mainShare:number, adminShare:number, stations:number}}
+ *   totalVotes:number, mainShare:number, blocShare:number, stations:number, captured:number}}
  */
-export function runElection(model, { enforcement = true, quotas = false, seed = 1 } = {}) {
+export function runElection(model, { loyalty = true, seed = 1 } = {}) {
   const rng = mulberry32(seed);
-  const ref = EP.enfRef.v * Math.max(1e-6, model.meanE);
   const main = new Float64Array(BINS);
   const opp = new Float64Array(BINS);
   const scatter = new Float32Array(2 * 4000);
-  let points = 0, totalMain = 0, totalVotes = 0, stations = 0;
+  let points = 0, totalMain = 0, totalVotes = 0, stations = 0, captured = 0;
 
-  const { baseTurnout, turnoutSd, temp, beta, beta2, roundFrom } = EP;
+  const { baseTurnout, turnoutSd, temp, mobilise } = EP;
+  const loyaltyK = loyalty ? EP.loyalty.v : 0;
   const stride = Math.max(1, (model.live / 4000) | 0);
   let seen = 0;
 
   for (let i = 0; i < CAP; i++) {
     if (!model.alive[i]) continue;
     stations++;
-    const u = enforcement ? clamp(model.enf[i] / ref, 0, 1) : 0;
-    const turnout = clamp(baseTurnout.v + gauss(rng) * turnoutSd.v + beta.v * u, 0.03, 0.995);
-    const honest = 1 / (1 + Math.exp(-(model.a[i] - 0.5) / temp.v));
-    let share = clamp(honest + beta2.v * u * (1 - honest), 0, 1);
-    if (quotas && u > roundFrom.v) share = Math.round(share * 20) / 20;
 
+    const head = model.headOf(i);
+    const grip = head === i ? 0
+      : loyaltyK * model.e[head] / (model.e[head] + model.e[i] + 1e-9);
+    if (grip > 0.5) captured++;
+
+    const own = 1 / (1 + Math.exp(-(model.a[i] - 0.5) / temp.v));
+    const headSide = head === i ? own : (model.a[head] > 0.5 ? 1 : 0);
+    const share = clamp((1 - grip) * own + grip * headSide, 0, 1);
+
+    const turnout = clamp(baseTurnout.v + gauss(rng) * turnoutSd.v + mobilise.v * grip, 0.03, 0.995);
     const votes = model.voters[i] * turnout;
     const bin = Math.min(BINS - 1, (turnout * BINS) | 0);
     main[bin] += votes * share;
@@ -70,18 +79,19 @@ export function runElection(model, { enforcement = true, quotas = false, seed = 
   }
 
   return {
-    main, opp, scatter, points, stations, totalVotes,
+    main, opp, scatter, points, stations, totalVotes, captured,
     mainShare: totalVotes > 0 ? totalMain / totalVotes : 0,
-    adminShare: administrativeShare(main, opp, totalVotes),
+    blocShare: blocVote(main, opp, totalVotes),
   };
 }
 
 /**
- * Shpilkin's estimate: the opposition curve is taken as the shape a clean election would
- * have, scaled to the mainstream curve on the low-turnout flank where inflation has not
- * reached, and whatever the mainstream curve carries above that is counted as administrative.
+ * Shpilkin's estimate, reading as it was meant to: the challenger curve is the shape a
+ * contest of free voters would have, scaled to the incumbent curve on the low-turnout flank
+ * where the structures do not reach. Whatever the incumbent curve carries above that is vote
+ * delivered by hierarchy rather than by preference.
  */
-export function administrativeShare(main, opp, totalVotes) {
+export function blocVote(main, opp, totalVotes) {
   if (totalVotes <= 0) return 0;
   let mode = 0;
   for (let b = 1; b < BINS; b++) if (opp[b] > opp[mode]) mode = b;
