@@ -115,8 +115,8 @@ export const P = {
   compassion:  { v: 0.10, min: 0,    max: 1,    step: 0.01,  label: 'Compassion' },
   drain:       { v: 0.020, min: 0, max: 0.2, step: 0.001, label: 'Drain per stick' },
   divide:      { v: 5.0, min: 1.5, max: 30, step: 0.1, label: 'Division threshold (x mean)' },
-  starve:      { v: 0.15, min: 0.01, max: 1, step: 0.01, label: 'Starvation floor (x mean)' },
-  influx:      { v: 9.0, min: 0.5, max: 60, step: 0.5, label: 'Total energy per step' },
+  starve:      { v: 0.06, min: 0.01, max: 3, step: 0.01, label: 'Starvation floor' },
+  land:        { v: 0.30, min: 0.005, max: 1,   step: 0.005, label: 'Energy per square' },
   upkeep:      { v: 0.018, min: 0.001, max: 0.1, step: 0.001, label: 'Upkeep' },
   metabolic:   { v: 0.75, min: 0.5,  max: 1,    step: 0.01,  label: 'Metabolic exponent' },
   repel:       { v: 0.25, min: 0, max: 2, step: 0.01, label: 'Cell repulsion' },
@@ -134,6 +134,10 @@ export const P = {
   recruitR:    { v: 22,   min: 6,    max: 60,   step: 1,     label: 'Recruitment radius' },
   recruitMin:  { v: 0.40, min: 0.05, max: 6, step: 0.05, label: 'Recruitment minimum (x mean)' },
   fanout:      { v: 3.0,  min: 1,    max: 12,   step: 0.5,   label: 'Children per unit size' },
+  campaign:    { v: 0.02, min: 0,    max: 0.5,  step: 0.005, label: 'Campaign force' },
+  warchest:    { v: 1.25, min: 1,    max: 4,    step: 0.05,  label: 'Strength before advancing' },
+  casualties:  { v: 0.30, min: 0,    max: 1,    step: 0.05,  label: 'Casualties taking a rival' },
+  surveyEvery: { v: 20,   min: 5,    max: 120,  step: 5,     label: 'Steps between surveys' },
   breakFree:   { v: 1.20, min: 1,    max: 4,    step: 0.05,  label: 'Break-free ratio' },
   tolerance:   { v: 0.35, min: 0.02, max: 1,    step: 0.01,  label: 'Confidence bound' },
   backfire:    { v: 0.55, min: 0,    max: 2,    step: 0.05,  label: 'Backfire' },
@@ -162,8 +166,8 @@ export const RULES = [
     text: () => 'A cell attaches the nearest unattached poorer cell of roughly its own views, up to a fanout that grows with its size. Absorbing in Kosmiki joins the victim on rather than deleting it, and this is the only thing that creates a stick.' },
   { name: 'Division', keys: ['divide'],
     text: () => 'Past a multiple of the mean cell size a cell splits. The child keeps the parent’s views exactly, the energy is halved between them, and the two start joined by a stick. Structures grow rather than being placed.' },
-  { name: 'Income, upkeep and starvation', keys: ['influx', 'upkeep', 'metabolic', 'starve'],
-    text: () => 'A fixed total income each second is split equally between every living cell, every cell pays upkeep on what it holds, and one that falls below the floor dies. Upkeep rises more slowly than size, as real metabolism does, so being large is cheaper per unit held \u2014 the economy of scale that lets a drained-from hierarchy run away from the cells feeding it.' },
+  { name: 'Land, upkeep and starvation', keys: ['land', 'upkeep', 'metabolic', 'starve'],
+    text: () => 'Every square of the field yields the same income, split between whoever is standing in it, so a cell alone on its square takes all of it and ten crowded together take a tenth each. Ground is therefore worth holding and worth spreading over, and a structure that packs itself into one corner starves. Each cell then pays upkeep on what it holds, and one that cannot hold the floor dies. The floor is a plain amount: tied to the mean it made a few rich isolated cells raise the bar that killed every crowded one, and tied to what a solitary cell sustains it moved faster than the income it was meant to track. Upkeep rises more slowly than size, as real metabolism does, so being large is cheaper per unit held \u2014 the economy of scale that lets a drained-from hierarchy run away from the cells feeding it.' },
   { name: 'Bounded confidence', keys: ['tolerance', 'backfire'],
     text: () => 'A cell is moved toward a view within the bound of its own and pushed away from one beyond it. This is what makes the field polarize: every other force here averages, and averaging can only converge, so without a repelled range every opinion collapses into one.' },
   { name: 'Mass media', keys: ['mediaTop', 'mediaR', 'mediaK'],
@@ -174,6 +178,10 @@ export const RULES = [
     text: () => 'A cell near the starvation floor turns against the side its own patron belongs to. Because energy runs uphill the periphery is always the poorest, so it defects without anyone deciding it should \u2014 and because it defects from whoever rules it rather than toward a fixed side, neither side is a trap the other can never escape.' },
   { name: 'Destruction', keys: ['theta', 'surcharge', 'absorbFloor'],
     text: () => `A cell destroys a near opponent when the alignment gap exceeds <code>theta / (1 - c)</code>, when it holds more energy, and when the victim holds at least the absorption floor of the attacker's energy — you cannot eat something far beneath you, which is why hierarchies have to grow intermediate layers. The attacker pays the victim's full energy plus the surcharge.` },
+  { name: 'Campaigns', keys: ['campaign', 'warchest', 'surveyEvery'],
+    text: () => 'Structures march on each other, whichever side they are on, because a faction of your own colour is worth taking too. One worth enough more than a rival advances on it, one worth less withdraws, and every member feels the same pull, so a faction moves as a body. Without it the towers settle out of each other\u2019s reach and the map freezes with nobody able to touch anybody.' },
+  { name: 'Taking a faction', keys: ['casualties'],
+    text: () => 'Reaching a rival head with a heavier cell takes the whole structure under it: the head is re-parented and its members come with it. Within one side that is all that happens, and a faction changes hands intact. Across the divide a share of the members do not survive it, and the victor pays for each.' },
   { name: 'Hunting', keys: ['hunt'],
     text: () => 'A cell accelerates toward opponents it could destroy and away from opponents that could destroy it. Fronts and territories come out of this, not out of any map.' },
   { name: 'Repression is not free', keys: ['surcharge', 'influenceC'],
@@ -203,6 +211,10 @@ export class Model {
     this.kids = new Int32Array(CAP);
     this.flow = new Float32Array(CAP);
     this.top = new Int32Array(64);
+    this.head = new Int32Array(CAP).fill(-1);
+    this.strength = new Float32Array(CAP);
+    this.target = new Int32Array(CAP).fill(-1);
+    this.surveyDue = 0;
 
     this.free = new Int32Array(CAP);
     this.freeTop = 0;
@@ -210,6 +222,7 @@ export class Model {
     this.meanE = 1;
     this.time = 0;
     this.destroyed = 0;
+    this.conquered = 0;
     this.divided = 0;
     this.live = 0;
 
@@ -299,7 +312,9 @@ export class Model {
     if (this.grid.cell !== cell) this.grid = new Grid(WORLD_W, WORLD_H, cell, CAP);
     this.grid.rebuild(this.x, this.y, this.alive, CAP);
 
+    this.survey();
     this.forcePass();
+    this.campaignPass();
     this.breakFreePass();
     this.drainPass();
     this.influencePass();
@@ -349,6 +364,85 @@ export class Model {
       vy[i] = (vy[i] + fy / m) * (1 - P.drag.v);
       x[i] = wrapX(xi + vx[i]); y[i] = wrapY(yi + vy[i]);
     }
+  }
+
+  /**
+   * Who belongs to whom and how much each structure is worth, refreshed every few steps
+   * because walking to the root for every cell is too costly to repeat every one.
+   */
+  survey() {
+    if (--this.surveyDue > 0) return;
+    this.surveyDue = P.surveyEvery.v | 0;
+    const { head, strength, target, alive, e, a } = this;
+    strength.fill(0);
+    for (let i = 0; i < CAP; i++) {
+      if (!alive[i]) { head[i] = -1; continue; }
+      const h = this.headOf(i);
+      head[i] = h;
+      strength[h] += e[i];
+    }
+    // Each structure picks the nearest rival it outweighs, and notes the nearest that outweighs it.
+    target.fill(-1);
+    for (let h = 0; h < CAP; h++) {
+      if (!alive[h] || head[h] !== h || strength[h] <= 0) continue;
+      let prey = -1, preyD = Infinity, threat = -1, threatD = Infinity;
+      for (let r = 0; r < CAP; r++) {
+        if (r === h || !alive[r] || head[r] !== r || strength[r] <= 0) continue;
+        const d = dx(this.x[h], this.x[r]) ** 2 + dy(this.y[h], this.y[r]) ** 2;
+        if (strength[h] > strength[r] * P.warchest.v) {
+          if (d < preyD) { preyD = d; prey = r; }
+        } else if (strength[r] > strength[h] * P.warchest.v) {
+          if (d < threatD) { threatD = d; threat = r; }
+        }
+      }
+      target[h] = prey >= 0 ? prey : (threat >= 0 ? ~threat : -1);
+    }
+  }
+
+  /**
+   * Structures march on each other. A tower strong enough to take a rival advances on it and
+   * one too weak withdraws, and every member feels it, so the structure moves as a body rather
+   * than as cells that happen to be adjacent. Without this the towers never come within the
+   * range at which any of the short-range rules can fire, and the map freezes.
+   */
+  campaignPass() {
+    const { x, y, vx, vy, e, alive, head, target } = this;
+    const k = P.campaign.v;
+    if (k === 0) return;
+    for (let i = 0; i < CAP; i++) {
+      if (!alive[i]) continue;
+      const h = head[i];
+      if (h < 0) continue;
+      const t = target[h];
+      if (t === -1) continue;
+      const foe = t >= 0 ? t : ~t;
+      const sign = t >= 0 ? 1 : -1;
+      if (!alive[foe]) continue;
+      const ddx = dx(x[i], x[foe]), ddy = dy(y[i], y[foe]);
+      const d = Math.hypot(ddx, ddy) || 1e-3;
+      const m = Math.max(0.4, e[i]);
+      vx[i] += sign * k * ddx / d / m;
+      vy[i] += sign * k * ddy / d / m;
+    }
+  }
+
+  /**
+   * Taking a faction of your own side costs it nothing: the head changes hands and the body
+   * carries on. Taking one across the divide is a war, and a share of its members do not
+   * survive it.
+   */
+  sack(head, victor) {
+    const share = P.casualties.v;
+    if (share <= 0) return;
+    let toll = 0;
+    for (let i = 0; i < CAP; i++) {
+      if (!this.alive[i] || this.head[i] !== head || i === head) continue;
+      if (((i * 2654435761) >>> 0) / 4294967296 >= share) continue;
+      this.kill(i);
+      toll++;
+    }
+    this.e[victor] = Math.max(0, this.e[victor] - toll * P.surcharge.v);
+    this.destroyed += toll;
   }
 
   /** A child that outgrows its parent past the ratio cuts the stick and stands on its own. */
@@ -506,13 +600,20 @@ export class Model {
       let victim = -1;
       this.grid.forEachNear(xi, yi, j => {
         if (victim >= 0 || j === i || !alive[j]) return;
-        if (Math.abs(ai - a[j]) < gap) return;
         if (!this.canAbsorb(i, j)) return;
         const ddx = dx(xi, x[j]), ddy = dy(yi, y[j]);
         if (ddx * ddx + ddy * ddy > R2) return;
         victim = j;
       });
       if (victim < 0) continue;
+      const hostile = Math.abs(ai - a[victim]) > gap;
+      if (this.head[victim] === victim && this.headOf(i) !== victim) {
+        this.link(victim, i);
+        this.conquered++;
+        if (hostile) this.sack(victim, i);
+        continue;
+      }
+      if (!hostile) continue;
       const cost = e[victim] * (1 + P.surcharge.v);
       if (ei <= cost) continue;
       e[i] = ei - cost;
@@ -545,13 +646,16 @@ export class Model {
    */
   incomePass() {
     const { e, alive } = this;
-    const share = this.live > 0 ? P.influx.v / this.live : 0;
     const rate = P.upkeep.v, exp = P.metabolic.v;
-    const floor = P.starve.v * this.meanE;
+    const floor = P.starve.v;
+    const { counts, cellOf } = this.grid;
+    const income = P.land.v;
     let sum = 0;
     for (let i = 0; i < CAP; i++) {
       if (!alive[i]) continue;
-      e[i] += share - Math.min(e[i], rate * Math.pow(e[i], exp));
+      const c = cellOf[i];
+      const crowd = c >= 0 ? counts[c + 1] - counts[c] : 1;
+      e[i] += income / Math.max(1, crowd) - Math.min(e[i], rate * Math.pow(e[i], exp));
       if (e[i] < floor) this.kill(i); else sum += e[i];
     }
     this.meanE = this.live > 0 ? sum / this.live : 1;
@@ -586,7 +690,7 @@ export class Model {
     return {
       live: this.live, main, opp, eSum, eMax, head,
       compassion: cSum / Math.max(1, this.live),
-      destroyed: this.destroyed, divided: this.divided,
+      destroyed: this.destroyed, divided: this.divided, conquered: this.conquered,
     };
   }
 }
