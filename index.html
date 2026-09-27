@@ -2,89 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Shpilka — how a hierarchy puts a tail in an election</title>
-<link rel="stylesheet" href="css/style.css">
+<title>How a hierarchy puts a tail in an election</title>
+<link rel="canonical" href="shpilka.html">
+<meta http-equiv="refresh" content="0; url=shpilka.html">
 </head>
-<body>
-
-<div id="stage">
-  <div id="net-wrap"><canvas id="net"></canvas></div>
-  <div id="panels">
-    <div class="panel">
-      <h2>Votes by turnout</h2>
-      <div class="readout" id="ro-hist"></div>
-      <canvas id="hist"></canvas>
-    </div>
-    <div class="panel">
-      <h2>Turnout / share</h2>
-      <canvas id="scatter"></canvas>
-    </div>
-    <div class="panel">
-      <h2>Compassion sweep</h2>
-      <div class="readout" id="ro-sweep"></div>
-      <canvas id="sweep"></canvas>
-    </div>
-  </div>
-</div>
-
-<aside id="side">
-  <header>
-    <h1>SHPILKA</h1>
-    <p>Cells drain their weaker neighbours; the reported vote inherits the tail.</p>
-  </header>
-
-  <div class="group">
-    <div class="ctl hero">
-      <label for="p-compassion"><span>Compassion</span><span id="v-compassion"></span></label>
-      <input type="range" id="p-compassion">
-      <div class="meter"><div id="m-compassion"></div></div>
-    </div>
-    <div class="row">
-      <button id="btn-rules">Rules</button>
-      <button id="btn-sweep">Sweep compassion</button>
-    </div>
-  </div>
-
-  <div class="group">
-    <h3>Election</h3>
-    <label class="check"><input type="checkbox" id="opt-control" checked>
-      Overlay the counterfactual with no enforcement</label>
-    <label class="check"><input type="checkbox" id="opt-quotas">
-      Stations under pressure work to a 5% quota</label>
-    <div class="row"><button id="btn-vote" class="wide">Hold an election now</button></div>
-    <div id="stats"></div>
-  </div>
-
-  <div class="group">
-    <h3>Presets</h3>
-    <div class="row">
-      <button data-preset="compassionate">Compassionate</button>
-      <button data-preset="ruthless">Ruthless</button>
-      <button data-preset="purge">Over-repressive</button>
-    </div>
-    <div class="row" style="margin-top:6px">
-      <button id="btn-pause">Pause</button>
-      <button id="btn-reset">Reset</button>
-      <button id="btn-debug">DBG</button>
-    </div>
-  </div>
-
-  <div class="group" id="g-model"><h3>Model</h3></div>
-  <div class="group" id="g-election"><h3>Election</h3></div>
-</aside>
-
-<div id="rules">
-  <div id="rules-box">
-    <div id="rules-head">
-      <h2>Every rule this page runs</h2>
-      <p>values are live</p>
-      <button id="rules-close">✕</button>
-    </div>
-    <div id="rules-list"></div>
-  </div>
-</div>
-
-<script type="module" src="js/main.js"></script>
-</body>
+<body><a href="shpilka.html">Continue</a></body>
 </html>

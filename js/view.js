@@ -30,10 +30,12 @@ export class View {
     this.gridColor = css('--grid');
     this.edge = css('--edge');
 
-    /** Alignment -1..+1 through a grey midpoint: a diverging scale never has a hue in the middle. */
+    /** Alignment 0..1 straight into the red and blue channels; green only desaturates the
+     *  midpoint, which would otherwise read as vivid magenta rather than as "uncommitted". */
     this.ramp = Array.from({ length: BUCKETS }, (_, k) => {
-      const t = k / (BUCKETS - 1) * 2 - 1;
-      return t < 0 ? mix(this.mid, this.opp, -t) : mix(this.mid, this.main, t);
+      const a = k / (BUCKETS - 1);
+      const g = Math.round(90 * (1 - Math.abs(2 * a - 1)));
+      return `rgb(${Math.round(255 * a)},${g},${Math.round(255 * (1 - a))})`;
     });
 
     this.canvases = {};
@@ -95,7 +97,7 @@ export class View {
     const paths = Array.from({ length: BUCKETS }, () => new Path2D());
     for (let i = 0; i < CAP; i++) {
       if (!alive[i]) continue;
-      const k = Math.round((clamp(a[i], -1, 1) + 1) / 2 * (BUCKETS - 1));
+      const k = Math.round(clamp(a[i], 0, 1) * (BUCKETS - 1));
       const r = Math.max(0.7, radius(e[i]) * s);
       const cx = ox + x[i] * s, cy = oy + y[i] * s;
       paths[k].moveTo(cx + r, cy);
@@ -110,7 +112,7 @@ export class View {
   /** Votes over turnout, one filled curve per party, with the counterfactual as an outline. */
   drawHistogram(result, control) {
     const { ctx, w, h } = this.clear('hist');
-    const pad = { l: 34, r: 10, t: 26, b: 22 };
+    const pad = { l: 34, r: 10, t: 30, b: 24 };
     const iw = w - pad.l - pad.r, ih = h - pad.t - pad.b;
     let max = 1e-9;
     for (let b = 0; b < BINS; b++) max = Math.max(max, result.main[b], result.opp[b]);
@@ -156,8 +158,6 @@ export class View {
     for (let t = 0; t <= 1.0001; t += 0.25) {
       ctx.fillText(`${Math.round(t * 100)}%`, pad.l + t * iw, h - 7);
     }
-    ctx.textAlign = 'left';
-    ctx.fillText('turnout →', pad.l, pad.t - 12);
     ctx.save();
     ctx.translate(11, pad.t + ih / 2);
     ctx.rotate(-Math.PI / 2);
@@ -165,7 +165,7 @@ export class View {
     ctx.fillText('votes', 0, 0);
     ctx.restore();
 
-    this.legend(ctx, pad.l + iw - 150, pad.t - 14, [
+    this.legend(ctx, pad.l + iw - 148, pad.t + 12, [
       [css('--main'), 'mainstream'],
       [css('--opp'), 'opposition'],
     ]);

@@ -37,7 +37,7 @@ class DebugLogger {
 
   report() {
     return [
-      '=== Shpilka debug report ===',
+      '=== debug report ===',
       `Time: ${new Date().toISOString()}`,
       ...Object.entries(this._meta).map(([k, v]) => `${k}: ${v}`),
       '',

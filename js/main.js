@@ -233,4 +233,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 dbg.setMeta({ capacity: CAP });
-dbg.info('shpilka ready');
+dbg.info('ready');

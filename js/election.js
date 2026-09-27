@@ -7,15 +7,15 @@
  */
 import { CAP, clamp, mulberry32, gauss } from './model.js';
 
-export const BINS = 100;
+export const BINS = 50;
 
 export const EP = {
   baseTurnout: { v: 0.44, min: 0.1,  max: 0.9,  step: 0.01,  label: 'Baseline turnout' },
   turnoutSd:   { v: 0.09, min: 0.01, max: 0.3,  step: 0.005, label: 'Turnout spread' },
-  temp:        { v: 0.38, min: 0.05, max: 1.5,  step: 0.01,  label: 'Preference sharpness' },
+  temp:        { v: 0.16, min: 0.02, max: 0.8,  step: 0.01,  label: 'Preference sharpness' },
   beta:        { v: 0.45, min: 0,    max: 1,    step: 0.01,  label: 'Mobilization by enforcement' },
   beta2:       { v: 0.80, min: 0,    max: 1,    step: 0.01,  label: 'Inflation by enforcement' },
-  enfRef:      { v: 6.0,  min: 0.2,  max: 60,   step: 0.2,   label: 'Enforcement reference' },
+  enfRef:      { v: 90,   min: 1,    max: 400,  step: 1,     label: 'Enforcement reference' },
   roundFrom:   { v: 0.45, min: 0,    max: 1,    step: 0.01,  label: 'Quota threshold' },
 };
 
@@ -23,7 +23,7 @@ export const ELECTION_RULES = [
   { name: 'Turnout', keys: ['baseTurnout', 'turnoutSd', 'beta'],
     text: () => 'Each station draws a turnout around the baseline, raised by the enforcement it received. Stations under pressure are mobilized as well as inflated, which is why the anomaly shows up along the turnout axis at all.' },
   { name: 'Reported share', keys: ['temp', 'beta2'],
-    text: () => 'The honest share is a logistic of the station’s own alignment. Enforcement pushes it the rest of the way toward 1, so the reported result parts company with the preference underneath it.' },
+    text: () => 'The honest share is a logistic of the station’s alignment above the midpoint. Enforcement pushes it the rest of the way toward 1, so the reported result parts company with the preference underneath it.' },
   { name: 'Enforcement reference', keys: ['enfRef'],
     text: () => 'Received enforcement is divided by this fixed amount and capped at 1, so the pressure term is an absolute fraction. It has to be fixed rather than a percentile of the population: scaling against the population would cancel the very change in pressure the sweep is there to show.' },
   { name: 'Quotas', keys: ['roundFrom'],
@@ -51,7 +51,7 @@ export function runElection(model, { enforcement = true, quotas = false, seed = 
     stations++;
     const u = enforcement ? clamp(model.enf[i] / ref, 0, 1) : 0;
     const turnout = clamp(baseTurnout.v + gauss(rng) * turnoutSd.v + beta.v * u, 0.03, 0.995);
-    const honest = 1 / (1 + Math.exp(-model.a[i] / temp.v));
+    const honest = 1 / (1 + Math.exp(-(model.a[i] - 0.5) / temp.v));
     let share = clamp(honest + beta2.v * u * (1 - honest), 0, 1);
     if (quotas && u > roundFrom.v) share = Math.round(share * 20) / 20;
 
