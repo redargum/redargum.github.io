@@ -44,7 +44,7 @@ body {
 #panels {
   height: 240px;
   display: grid;
-  grid-template-columns: 2fr 1fr;
+  grid-template-columns: 2fr 1fr 1fr;
   gap: 1px;
   background: var(--border);
   border-top: 1px solid var(--border);
@@ -180,6 +180,11 @@ button.wide { width: 100%; }
       <h2>Turnout / share</h2>
       <canvas id="scatter"></canvas>
     </div>
+    <div class="panel">
+      <h2>History</h2>
+      <div class="readout" id="ro-hist2"></div>
+      <canvas id="history"></canvas>
+    </div>
   </div>
 </div>
 
@@ -279,7 +284,7 @@ class View {
     });
 
     this.canvases = {};
-    for (const id of ['net', 'hist', 'scatter']) {
+    for (const id of ['net', 'hist', 'scatter', 'history']) {
       const el = document.getElementById(id);
       this.canvases[id] = { el, ctx: el.getContext('2d', { alpha: false }) };
     }
@@ -442,6 +447,58 @@ class View {
     ctx.restore();
   }
 
+
+  /**
+   * Red's share over time against a midline, with turnout and the bloc vote beside it. Red's
+   * share rather than the winner's: a winner's line would change colour at every handover,
+   * where a crossing of the midline shows the same thing and stays one colour throughout.
+   */
+  drawHistory(hist) {
+    const { ctx, w, h } = this.clear('history');
+    const pad = { l: 30, r: 10, t: 30, b: 18 };
+    const iw = w - pad.l - pad.r, ih = h - pad.t - pad.b;
+    ctx.strokeStyle = this.gridColor;
+    ctx.strokeRect(pad.l + 0.5, pad.t + 0.5, iw, ih);
+
+    const y = v => pad.t + ih - clamp(v, 0, 1) * ih;
+    ctx.setLineDash([2, 3]);
+    ctx.strokeStyle = 'rgba(255,255,255,.22)';
+    ctx.beginPath(); ctx.moveTo(pad.l, y(0.5)); ctx.lineTo(pad.l + iw, y(0.5)); ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.fillStyle = this.textMuted;
+    ctx.font = '10px system-ui';
+    ctx.textAlign = 'right';
+    ctx.fillText('50%', pad.l - 3, y(0.5) + 3);
+    ctx.textAlign = 'left';
+    ctx.fillText(`${hist.length}s`, pad.l, h - 5);
+
+    if (hist.length < 2) {
+      ctx.textAlign = 'center';
+      ctx.fillText('gathering', pad.l + iw / 2, pad.t + ih / 2 - 14);
+      return;
+    }
+    const line = (pick, color, width) => {
+      ctx.beginPath();
+      hist.forEach((p, k) => {
+        const px = pad.l + (hist.length === 1 ? 0 : k / (hist.length - 1)) * iw;
+        k === 0 ? ctx.moveTo(px, y(pick(p))) : ctx.lineTo(px, y(pick(p)));
+      });
+      ctx.strokeStyle = color; ctx.lineWidth = width; ctx.stroke();
+    };
+    line(p => p.turnout, this.textMuted, 1);
+    line(p => p.bloc, css('--accent'), 1);
+    line(p => p.red, css('--main'), 2);
+
+    const last = hist[hist.length - 1];
+    ctx.textAlign = 'right';
+    ctx.fillStyle = css('--main');
+    ctx.fillText('red', pad.l + iw - 4, y(last.red) - 5);
+    ctx.fillStyle = css('--accent');
+    ctx.fillText('bloc', pad.l + iw - 4, y(last.bloc) - 5);
+    ctx.fillStyle = this.textMuted;
+    ctx.fillText('turnout', pad.l + iw - 4, y(last.turnout) - 5);
+  }
 
   /** Write a curve's name at its own peak, so no key has to be carried in the head. */
   label(ctx, arr, color, text, pad, iw, ih, max, placed) {
@@ -657,7 +714,7 @@ initRules();
 
 view.onResize = () => {
   view.drawNetwork(model);
-  if (result) { view.drawHistogram(result, control); view.drawScatter(result); }
+  if (result) { view.drawHistogram(result, control); view.drawScatter(result); view.drawHistory(series); }
 };
 
 const drawInput = document.getElementById('p-draw');
@@ -669,6 +726,10 @@ drawInput.oninput = () => {
 drawInput.oninput();
 
 const rate = { steps: 0, frames: 0, since: performance.now(), stepsPerSec: 0, fps: 0 };
+
+/** One sample per second of the figures worth watching move. */
+const series = [];
+const SERIES_MAX = 240;
 
 let paused = false;
 let result = null;
@@ -686,7 +747,7 @@ document.getElementById('btn-pause').onclick = e => {
   e.target.textContent = paused ? 'Resume' : 'Pause';
   e.target.classList.toggle('on', paused);
 };
-document.getElementById('btn-reset').onclick = () => { model.reset(); hold(); };
+document.getElementById('btn-reset').onclick = () => { model.reset(); series.length = 0; hold(); };
 document.getElementById('btn-debug').onclick = () => debugPanel.toggle();
 document.getElementById('opt-control').onchange = hold;
 
@@ -740,8 +801,13 @@ function hold() {
   control = document.getElementById('opt-control').checked
     ? runElection(model, { loyalty: false, seed: electionSeed })
     : null;
+  series.push({ red: result.redShare, turnout: result.turnout, bloc: result.blocShare });
+  if (series.length > SERIES_MAX) series.shift();
+
   view.drawHistogram(result, control);
   view.drawScatter(result);
+  view.drawHistory(series);
+  document.getElementById('ro-hist2').textContent = `red ${(result.redShare * 100).toFixed(1)}%`;
   document.getElementById('ro-hist').textContent =
     `incumbent ${(result.mainShare * 100).toFixed(1)}% · bloc vote ${(result.blocShare * 100).toFixed(1)}%`;
   renderStats();
