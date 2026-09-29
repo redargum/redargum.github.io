@@ -120,6 +120,7 @@ export const P = {
   compassion:  { v: 0.50, min: 0,    max: 1,    step: 0.01,  label: 'Compassion' },
   drain:       { v: 0.05, min: 0, max: 1, step: 0.01, label: 'Share the stick carries' },
   divide:      { v: 5.0, min: 1.5, max: 30, step: 0.1, label: 'Division threshold (x mean)' },
+  span:        { v: 5,   min: 1,   max: 20, step: 1,   label: 'Span of control' },
   starve:      { v: 0.06, min: 0.01, max: 3, step: 0.01, label: 'Starvation floor' },
   land:        { v: 0.30, min: 0.005, max: 1,   step: 0.005, label: 'Energy per square' },
   upkeep:      { v: 0.018, min: 0.001, max: 0.1, step: 0.001, label: 'Upkeep' },
@@ -168,6 +169,8 @@ export const RULES = [
     text: () => 'A cell attaches the nearest unattached poorer cell of roughly its own views, up to a fanout that grows with its size. Absorbing in Kosmiki joins the victim on rather than deleting it, and this is the only thing that creates a stick.' },
   { name: 'Division', keys: ['divide'],
     text: () => 'Past a multiple of the mean cell size a cell splits. The child keeps the parent’s views exactly, the energy is halved between them, and the two start joined by a stick. Structures grow rather than being placed.' },
+  { name: 'Span of control', keys: ['span'],
+    text: () => 'A cell that splits while holding more followers than the span hands every other one to the new cell, which then stands beside it under the same patron rather than beneath it. Nobody manages a crowd directly: a structure grows middle layers instead of a hub ringed by followers, and it grows taller only when its head splits.' },
   { name: 'Land, upkeep and starvation', keys: ['land', 'upkeep', 'metabolic', 'starve'],
     text: () => 'Every square of the field yields the same income, split between whoever is standing in it, so a cell alone on its square takes all of it and ten crowded together take a tenth each. Ground is therefore worth holding and worth spreading over, and a structure that packs itself into one corner starves. Each cell then pays upkeep on what it holds, and one that cannot hold the floor dies. The floor is a plain amount: tied to the mean it made a few rich isolated cells raise the bar that killed every crowded one, and tied to what a solitary cell sustains it moved faster than the income it was meant to track. Upkeep rises more slowly than size, as real metabolism does, so being large is cheaper per unit held \u2014 the economy of scale that lets a drained-from hierarchy run away from the cells feeding it.' },
   { name: 'Falling in line', keys: ['conform', 'conformAt'],
@@ -585,7 +588,13 @@ export class Model {
       if (j < 0) break;
       e[i] = half;
       a[j] = a[i];
-      this.link(j, i);
+      // An overfull cell splits like a B-tree node: the new cell takes half its followers and stands beside it.
+      let up = i;
+      if (this.kids[i] > P.span.v) {
+        for (let k = 0, n = 0; k < CAP; k++) if (alive[k] && k !== j && this.parentOf(k) === i && n++ % 2) this.link(k, j);
+        if (this.parentOf(i) >= 0) up = this.parentOf(i);
+      }
+      this.link(j, up);
       this.divided++;
     }
   }
@@ -638,8 +647,29 @@ export class Model {
       if (this.a[i] > 0.5) red++; else blue++;
       if (this.e[i] > eMax) { eMax = this.e[i]; head = i; }
     }
+    // Levels between each attached cell and its head, memoised so a chain is walked once.
+    const depth = new Int32Array(CAP).fill(-1), patrons = new Uint8Array(CAP);
+    let levels = 0, attached = 0;
+    for (let i = 0; i < CAP; i++) {
+      if (!this.alive[i]) continue;
+      const path = [];
+      let cur = i;
+      while (depth[cur] < 0) {
+        const p = this.parentOf(cur);
+        if (p < 0 || path.length > CAP) { depth[cur] = 0; break; }
+        path.push(cur);
+        cur = p;
+      }
+      for (let k = path.length - 1, d = depth[cur]; k >= 0; k--) depth[path[k]] = ++d;
+      const p = this.parentOf(i);
+      if (p >= 0) { patrons[p] = 1; levels += depth[i]; attached++; }
+    }
+    let patronCount = 0;
+    for (let i = 0; i < CAP; i++) patronCount += patrons[i];
     return {
       live: this.live, red, blue, eSum, eMax, head,
+      depth: attached > 0 ? levels / attached : 0,
+      span: patronCount > 0 ? attached / patronCount : 0,
       compassion: P.compassion.v,
       destroyed: this.destroyed, divided: this.divided, conquered: this.conquered,
     };

@@ -867,6 +867,8 @@ function renderStats() {
   document.getElementById('stats').innerHTML = rows
     .concat([
       ['&nbsp;', ''],
+      ['Hierarchy depth', s.depth.toFixed(1)],
+      ['Span of control', s.span.toFixed(1)],
       ['Largest cell', s.eMax.toFixed(0)],
       ['Destroyed', s.destroyed],
       ['Divided', s.divided],
