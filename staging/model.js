@@ -688,7 +688,7 @@ export function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
  *
  * Nobody falsifies anything here. Every vote is cast willingly and counted as cast. A cell
  * votes its colour, which is its loyalty to a party, and turns out by its energy, so the
- * starving barely vote and nobody votes for certain. The tail comes from the ruling party's
+ * poor vote less and the rich more. The tail comes from the ruling party's
  * chain of command, which brings its loyal followers out and tells them how to vote, more
  * weakly the further down the order is relayed.
  *
@@ -705,21 +705,23 @@ export const BINS = 50;
 export const EP = {
   temp:        { v: 0.16, min: 0.02, max: 0.8,  step: 0.01,  label: 'Preference sharpness',
     tip: 'How decisively a mild preference becomes a vote: own = 1 / (1 + exp(-(a - 0.5) / temp)).' },
-  turnoutAt:   { v: 0.30, min: 0.05, max: 5,    step: 0.05,  label: 'Energy at half turnout (x mean)',
-    tip: 'A cell holding this multiple of the mean energy votes with turnout 0.5. Higher makes everyone lazier.' },
-  turnoutSpread: { v: 0.35, min: 0.05, max: 2,  step: 0.05,  label: 'Turnout spread',
-    tip: 'How fast turnout rises with energy: turnout = r / (1 + r), r = (e / (turnoutAt * mean)) ^ spread.' },
+  turnoutBase: { v: 0.45, min: 0,    max: 1,    step: 0.01,  label: 'Turnout at the standard of living',
+    tip: 'Turnout of a cell holding the mean energy. Lower makes everyone lazier.' },
+  turnoutSlope: { v: 0.05, min: 0,   max: 0.5,  step: 0.01,  label: 'Turnout per unit of wealth',
+    tip: 'Turnout gained per mean energy held: turnout = clamp(base + slope * (e / mean - 1), 0, 1).' },
   command:     { v: 0.90, min: 0,    max: 1,    step: 0.01,  label: 'Command of the ruling party',
-    tip: 'Power of a ruling-party boss over a loyal follower: command ^ depth, so it weakens with each level below the head.' },
+    tip: 'Power of a ruling-party boss over its direct followers: c = command * (1 - fade * (depth - 1)) * loyalty.' },
+  fade:        { v: 0.05, min: 0,    max: 0.5,  step: 0.01,  label: 'Command lost per level',
+    tip: 'Share of the command lost at each level it is relayed below the head\u2019s direct followers.' },
 };
 
 export const ELECTION_RULES = [
   { name: 'Nobody cheats', keys: [],
     text: () => 'Every vote is cast willingly and counted as cast. There is no stuffing, no inflation and no quota. Whatever shape the returns take, the mechanism producing it is social, not criminal.' },
-  { name: 'Command', keys: ['command'],
-    text: () => 'The ruling party is the one whose cells hold more energy, and only its chain of command can order a vote. A follower of one of its bosses is commanded with <code>c = command ^ depth * (1 - |a - party|)</code>, where <code>depth</code> counts the levels up to the head: weaker the further down the order travels, and weaker the less loyal the follower. It then turns out at <code>t + (1 - t) * c</code> and votes <code>(1 - c) * own + c * party</code>. Everyone else votes their own colour at their own turnout.' },
-  { name: 'Who turns out', keys: ['turnoutAt', 'turnoutSpread'],
-    text: () => 'Turnout rises with what a cell holds: <code>r / (1 + r)</code>, where <code>r = (e / (turnoutAt * mean)) ^ spread</code>. The starving stay at home, a cell at the reference votes half the time, and no fortune brings anyone out for certain. Every station has the same electorate, so a station casts <code>turnout</code> votes whatever its wealth.' },
+  { name: 'Command', keys: ['command', 'fade'],
+    text: () => 'The ruling party is the one whose cells hold more energy, and only its chain of command can order a vote. A follower of one of its bosses is commanded with <code>c = command * max(0, 1 - fade * (depth - 1)) * (1 - |a - party|)</code>, where <code>depth</code> counts the levels up to the head: weaker the further down the order travels, and weaker the less loyal the follower. It then turns out at <code>t + (1 - t) * c</code> and votes <code>(1 - c) * own + c * party</code>. Everyone else votes their own colour at their own turnout.' },
+  { name: 'Who turns out', keys: ['turnoutBase', 'turnoutSlope'],
+    text: () => 'Turnout rises in a straight line with what a cell holds: <code>clamp(base + slope * (e / mean - 1), 0, 1)</code>. A cell at the standard of living votes at the base rate, the poor a little less and the rich more. Every station has the same electorate, so a station casts <code>turnout</code> votes whatever its wealth.' },
   { name: 'Preference', keys: ['temp'],
     text: () => 'A cell votes a logistic of how far its own alignment sits above the midpoint. Sharpness sets how decisively a mild preference becomes a vote.' },
 ];
@@ -735,8 +737,8 @@ export function runElection(model) {
   const scatter = new Float32Array(2 * 4000);
   let points = 0, redVotes = 0, totalVotes = 0, stations = 0;
 
-  const { temp, turnoutAt, turnoutSpread, command } = EP;
-  const ref = Math.max(1e-9, turnoutAt.v * model.meanE);
+  const { temp, turnoutBase, turnoutSlope, command, fade } = EP;
+  const meanE = Math.max(1e-9, model.meanE);
   let redE = 0, allE = 0;
   for (let i = 0; i < CAP; i++) if (model.alive[i]) { allE += model.e[i]; if (model.a[i] > 0.5) redE += model.e[i]; }
   const ruling = redE * 2 >= allE ? 1 : 0;
@@ -748,15 +750,14 @@ export function runElection(model) {
     stations++;
 
     const own = 1 / (1 + Math.exp(-(model.a[i] - 0.5) / temp.v));
-    const r = Math.pow(model.e[i] / ref, turnoutSpread.v);
-    const t0 = r / (1 + r);
+    const t0 = clamp(turnoutBase.v + turnoutSlope.v * (model.e[i] / meanE - 1), 0, 1);
 
     const boss = model.parentOf(i);
     let c = 0;
     if (boss >= 0 && model.a[boss] !== 0.5 && (model.a[boss] > 0.5 ? 1 : 0) === ruling) {
       let depth = 0;
       for (let up = boss; up >= 0 && depth <= CAP; up = model.parentOf(up)) depth++;
-      c = Math.pow(command.v, depth) * (1 - Math.abs(model.a[i] - ruling));
+      c = command.v * Math.max(0, 1 - fade.v * (depth - 1)) * (1 - Math.abs(model.a[i] - ruling));
     }
     const turnout = t0 + (1 - t0) * c;
     const share = (1 - c) * own + c * ruling;
