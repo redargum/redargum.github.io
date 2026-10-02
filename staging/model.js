@@ -687,8 +687,8 @@ export function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
  * An honest election, and the two curves Shpilkin's method compares.
  *
  * Nobody falsifies anything here. Every vote is cast willingly and counted as cast. A cell
- * votes its colour, which is its loyalty to a party, and casts votes in proportion to its
- * energy, so the starving barely count. Whatever tail the returns grow comes from how the
+ * votes its colour, which is its loyalty to a party, and turns out by its energy, so the
+ * starving barely vote and nobody votes for certain. Whatever tail the returns grow comes from how the
  * structures moved their members' loyalty and who they bring to the polls.
  *
  * Neither colour is the incumbent by definition. Whichever side is ahead when the votes are
@@ -704,8 +704,10 @@ export const BINS = 50;
 export const EP = {
   temp:        { v: 0.16, min: 0.02, max: 0.8,  step: 0.01,  label: 'Preference sharpness',
     tip: 'How decisively a mild preference becomes a vote: own = 1 / (1 + exp(-(a - 0.5) / temp)).' },
-  parityFall:  { v: 0.30, min: 0.05, max: 1,    step: 0.01,  label: 'How slowly turnout falls',
-    tip: 'Turnout of an attached cell: min(1, e / e_parent) ^ parityFall. Lower means turnout falls more slowly.' },
+  turnoutAt:   { v: 0.30, min: 0.05, max: 5,    step: 0.05,  label: 'Energy at half turnout (x mean)',
+    tip: 'A cell holding this multiple of the mean energy votes with turnout 0.5. Higher makes everyone lazier.' },
+  turnoutSpread: { v: 0.35, min: 0.05, max: 2,  step: 0.05,  label: 'Turnout spread',
+    tip: 'How fast turnout rises with energy: turnout = r / (1 + r), r = (e / (turnoutAt * mean)) ^ spread.' },
 };
 
 export const ELECTION_RULES = [
@@ -713,8 +715,8 @@ export const ELECTION_RULES = [
     text: () => 'Every vote is cast willingly and counted as cast. There is no stuffing, no inflation and no quota. Whatever shape the returns take, the mechanism producing it is social, not criminal.' },
   { name: 'The vote is the colour', keys: [],
     text: () => 'A cell votes its own colour and nothing else: no head tells it how to vote. A structure changes the result only by having moved its members\u2019 loyalty and by who it brings to the polls.' },
-  { name: 'Who turns out', keys: ['parityFall'],
-    text: () => 'A cell answering to nobody votes on conviction alone, <code>|2a - 1|</code>: certain at either pole, not at all in the middle. A cell answering to someone votes on how far it stands from them, <code>min(1, e / e_parent) ^ parityFall</code>: fully at parity, and falling away the further its patron towers over it, gently rather than in proportion. Being dominated puts you off going, it does not march you out. A cell casts <code>turnout * e</code> votes, so the starving barely count.' },
+  { name: 'Who turns out', keys: ['turnoutAt', 'turnoutSpread'],
+    text: () => 'Turnout rises with what a cell holds: <code>r / (1 + r)</code>, where <code>r = (e / (turnoutAt * mean)) ^ spread</code>. The starving stay at home, a cell at the reference votes half the time, and no fortune brings anyone out for certain. Every station has the same electorate, so a station casts <code>turnout</code> votes whatever its wealth.' },
   { name: 'Preference', keys: ['temp'],
     text: () => 'A cell votes a logistic of how far its own alignment sits above the midpoint. Sharpness sets how decisively a mild preference becomes a vote.' },
 ];
@@ -728,9 +730,10 @@ export function runElection(model) {
   const red = new Float64Array(BINS);
   const blue = new Float64Array(BINS);
   const scatter = new Float32Array(2 * 4000);
-  let points = 0, redVotes = 0, totalVotes = 0, electorate = 0, stations = 0;
+  let points = 0, redVotes = 0, totalVotes = 0, stations = 0;
 
-  const { temp, parityFall } = EP;
+  const { temp, turnoutAt, turnoutSpread } = EP;
+  const ref = Math.max(1e-9, turnoutAt.v * model.meanE);
   const stride = Math.max(1, (model.live / 4000) | 0);
   let seen = 0;
 
@@ -740,14 +743,9 @@ export function runElection(model) {
 
     const share = 1 / (1 + Math.exp(-(model.a[i] - 0.5) / temp.v));
 
-    // Answering to nobody, only conviction brings you out. Answering to someone, what brings
-    // you out is standing near enough to them to matter: parity votes, domination does not.
-    const parent = model.parentOf(i);
-    const turnout = parent < 0
-      ? Math.abs(model.a[i] - 0.5) * 2
-      : Math.pow(Math.min(1, model.e[i] / Math.max(1e-9, model.e[parent])), parityFall.v);
-    const votes = turnout * model.e[i];
-    electorate += model.e[i];
+    const r = Math.pow(model.e[i] / ref, turnoutSpread.v);
+    const turnout = r / (1 + r);
+    const votes = turnout;
     const bin = Math.min(BINS - 1, (turnout * BINS) | 0);
     red[bin] += votes * share;
     blue[bin] += votes * (1 - share);
@@ -773,7 +771,7 @@ export function runElection(model) {
     main, opp, scatter, points, stations, totalVotes,
     incumbentIsRed: redLeads,
     redShare: totalVotes > 0 ? redVotes / totalVotes : 0,
-    turnout: electorate > 0 ? totalVotes / electorate : 0,
+    turnout: stations > 0 ? totalVotes / stations : 0,
     mainShare: totalVotes > 0 ? incumbentVotes / totalVotes : 0,
     blocShare: blocVote(main, opp, totalVotes),
   };
