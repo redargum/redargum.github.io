@@ -688,8 +688,9 @@ export function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
  *
  * Nobody falsifies anything here. Every vote is cast willingly and counted as cast. A cell
  * votes its colour, which is its loyalty to a party, and turns out by its energy, so the
- * starving barely vote and nobody votes for certain. Whatever tail the returns grow comes from how the
- * structures moved their members' loyalty and who they bring to the polls.
+ * starving barely vote and nobody votes for certain. The tail comes from the ruling party's
+ * chain of command, which brings its loyal followers out and tells them how to vote, more
+ * weakly the further down the order is relayed.
  *
  * Neither colour is the incumbent by definition. Whichever side is ahead when the votes are
  * counted holds that standing, and the other is the challenger whose curve supplies the
@@ -708,13 +709,15 @@ export const EP = {
     tip: 'A cell holding this multiple of the mean energy votes with turnout 0.5. Higher makes everyone lazier.' },
   turnoutSpread: { v: 0.35, min: 0.05, max: 2,  step: 0.05,  label: 'Turnout spread',
     tip: 'How fast turnout rises with energy: turnout = r / (1 + r), r = (e / (turnoutAt * mean)) ^ spread.' },
+  command:     { v: 0.90, min: 0,    max: 1,    step: 0.01,  label: 'Command of the ruling party',
+    tip: 'Power of a ruling-party boss over a loyal follower: command ^ depth, so it weakens with each level below the head.' },
 };
 
 export const ELECTION_RULES = [
   { name: 'Nobody cheats', keys: [],
     text: () => 'Every vote is cast willingly and counted as cast. There is no stuffing, no inflation and no quota. Whatever shape the returns take, the mechanism producing it is social, not criminal.' },
-  { name: 'The vote is the colour', keys: [],
-    text: () => 'A cell votes its own colour and nothing else: no head tells it how to vote. A structure changes the result only by having moved its members\u2019 loyalty and by who it brings to the polls.' },
+  { name: 'Command', keys: ['command'],
+    text: () => 'The ruling party is the one whose cells hold more energy, and only its chain of command can order a vote. A follower of one of its bosses is commanded with <code>c = command ^ depth * (1 - |a - party|)</code>, where <code>depth</code> counts the levels up to the head: weaker the further down the order travels, and weaker the less loyal the follower. It then turns out at <code>t + (1 - t) * c</code> and votes <code>(1 - c) * own + c * party</code>. Everyone else votes their own colour at their own turnout.' },
   { name: 'Who turns out', keys: ['turnoutAt', 'turnoutSpread'],
     text: () => 'Turnout rises with what a cell holds: <code>r / (1 + r)</code>, where <code>r = (e / (turnoutAt * mean)) ^ spread</code>. The starving stay at home, a cell at the reference votes half the time, and no fortune brings anyone out for certain. Every station has the same electorate, so a station casts <code>turnout</code> votes whatever its wealth.' },
   { name: 'Preference', keys: ['temp'],
@@ -732,8 +735,11 @@ export function runElection(model) {
   const scatter = new Float32Array(2 * 4000);
   let points = 0, redVotes = 0, totalVotes = 0, stations = 0;
 
-  const { temp, turnoutAt, turnoutSpread } = EP;
+  const { temp, turnoutAt, turnoutSpread, command } = EP;
   const ref = Math.max(1e-9, turnoutAt.v * model.meanE);
+  let redE = 0, allE = 0;
+  for (let i = 0; i < CAP; i++) if (model.alive[i]) { allE += model.e[i]; if (model.a[i] > 0.5) redE += model.e[i]; }
+  const ruling = redE * 2 >= allE ? 1 : 0;
   const stride = Math.max(1, (model.live / 4000) | 0);
   let seen = 0;
 
@@ -741,10 +747,19 @@ export function runElection(model) {
     if (!model.alive[i]) continue;
     stations++;
 
-    const share = 1 / (1 + Math.exp(-(model.a[i] - 0.5) / temp.v));
-
+    const own = 1 / (1 + Math.exp(-(model.a[i] - 0.5) / temp.v));
     const r = Math.pow(model.e[i] / ref, turnoutSpread.v);
-    const turnout = r / (1 + r);
+    const t0 = r / (1 + r);
+
+    const boss = model.parentOf(i);
+    let c = 0;
+    if (boss >= 0 && model.a[boss] !== 0.5 && (model.a[boss] > 0.5 ? 1 : 0) === ruling) {
+      let depth = 0;
+      for (let up = boss; up >= 0 && depth <= CAP; up = model.parentOf(up)) depth++;
+      c = Math.pow(command.v, depth) * (1 - Math.abs(model.a[i] - ruling));
+    }
+    const turnout = t0 + (1 - t0) * c;
+    const share = (1 - c) * own + c * ruling;
     const votes = turnout;
     const bin = Math.min(BINS - 1, (turnout * BINS) | 0);
     red[bin] += votes * share;
