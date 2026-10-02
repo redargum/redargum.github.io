@@ -207,8 +207,6 @@ button.wide { width: 100%; }
 
   <div class="group">
     <h3>If an election were held now</h3>
-    <label class="check"><input type="checkbox" id="opt-control" checked>
-      Overlay the counterfactual where everyone votes for themselves</label>
     <div id="stats"></div>
   </div>
 
@@ -358,14 +356,13 @@ class View {
     if (spoiled && !this.warned) { this.warned = true; dbg.error(`${spoiled} cells are not finite`); }
   }
 
-  /** Votes over turnout, one filled curve per party, with the counterfactual as an outline. */
-  drawHistogram(result, control) {
+  /** Votes over turnout, one filled curve per party. */
+  drawHistogram(result) {
     const { ctx, w, h } = this.clear('hist');
     const pad = { l: 34, r: 10, t: 30, b: 24 };
     const iw = w - pad.l - pad.r, ih = h - pad.t - pad.b;
     let max = 1e-9;
     for (let b = 0; b < BINS; b++) max = Math.max(max, result.main[b], result.opp[b]);
-    if (control) for (let b = 0; b < BINS; b++) max = Math.max(max, control.main[b], control.opp[b]);
 
     ctx.strokeStyle = this.gridColor;
     ctx.lineWidth = 1;
@@ -376,7 +373,7 @@ class View {
     }
     ctx.stroke();
 
-    const curve = (arr, fill, stroke, dashed) => {
+    const curve = (arr, fill, stroke) => {
       ctx.beginPath();
       for (let b = 0; b < BINS; b++) {
         const px = pad.l + (b + 0.5) / BINS * iw;
@@ -390,18 +387,15 @@ class View {
         ctx.fillStyle = fill;
         ctx.fill();
       }
-      ctx.setLineDash(dashed ? [3, 3] : []);
       ctx.strokeStyle = stroke;
       ctx.lineWidth = 2;
       ctx.stroke();
-      ctx.setLineDash([]);
     };
 
     const inc = result.incumbentIsRed ? css('--main') : css('--opp');
     const chl = result.incumbentIsRed ? css('--opp') : css('--main');
-    curve(result.opp, tint(chl, 0.22), chl, false);
-    curve(result.main, tint(inc, 0.22), inc, false);
-    if (control) curve(control.main, null, inc, true);
+    curve(result.opp, tint(chl, 0.22), chl);
+    curve(result.main, tint(inc, 0.22), inc);
 
     ctx.fillStyle = this.textMuted;
     ctx.font = '10px system-ui';
@@ -717,7 +711,7 @@ const STEPS_PER_FRAME = 1;
 const PANEL_MS = 1000;
 
 /** Bump whenever a parameter's meaning or range changes, so stored values cannot outlive it. */
-const SCHEMA = 4;
+const SCHEMA = 5;
 
 const config = new Config('compassion');
 const model = new Model();
@@ -727,7 +721,7 @@ initRules();
 
 view.onResize = () => {
   view.drawNetwork(model);
-  if (result) { view.drawHistogram(result, control); view.drawScatter(result); view.drawHistory(series); }
+  if (result) { view.drawHistogram(result); view.drawScatter(result); view.drawHistory(series); }
 };
 
 const drawInput = document.getElementById('p-draw');
@@ -750,8 +744,6 @@ const SERIES_MAX = 240;
 
 let paused = false;
 let result = null;
-let control = null;
-let electionSeed = 1;
 
 buildControls(document.getElementById('g-model'), P, k => k !== 'compassion' && k !== 'drag');
 buildControls(document.getElementById('g-election'), EP, () => true);
@@ -779,7 +771,6 @@ document.getElementById('btn-defaults').onclick = () => {
 };
 document.getElementById('btn-reset').onclick = () => { model.reset(); series.length = 0; hold(); };
 document.getElementById('btn-debug').onclick = () => debugPanel.toggle();
-document.getElementById('opt-control').onchange = hold;
 
 /** One slider per parameter, so a rule and its control cannot disagree. */
 function buildControls(host, params, keep) {
@@ -790,6 +781,7 @@ function buildControls(host, params, keep) {
     ctl.className = 'ctl';
     ctl.innerHTML = `<label for="x-${key}"><span>${p.label}</span><span id="xv-${key}"></span></label>` +
       `<input type="range" id="x-${key}" min="${p.min}" max="${p.max}" step="${p.step}">`;
+    ctl.querySelector('label').title = p.tip;
     host.appendChild(ctl);
     const input = ctl.querySelector('input');
     input.value = p.v;
@@ -811,6 +803,7 @@ function bindHero() {
   const input = document.getElementById('p-compassion');
   const p = P.compassion;
   input.min = p.min; input.max = p.max; input.step = p.step; input.value = p.v;
+  document.querySelector('label[for="p-compassion"]').title = p.tip;
   input.oninput = () => {
     p.v = Number(input.value);
     syncHero();
@@ -826,15 +819,11 @@ function syncHero() {
 }
 
 function hold() {
-  electionSeed++;
-  result = runElection(model, { loyalty: true, seed: electionSeed });
-  control = document.getElementById('opt-control').checked
-    ? runElection(model, { loyalty: false, seed: electionSeed })
-    : null;
+  result = runElection(model);
   series.push({ red: result.redShare, turnout: result.turnout, bloc: result.blocShare });
   if (series.length > SERIES_MAX) series.shift();
 
-  view.drawHistogram(result, control);
+  view.drawHistogram(result);
   view.drawScatter(result);
   view.drawHistory(series);
   document.getElementById('ro-hist2').textContent = `red share ${(result.redShare * 100).toFixed(1)}%`;
@@ -860,13 +849,15 @@ function renderStats() {
     ['Winner by preference',
       pct((result_.incumbentIsRed ? s.red : s.blue) / Math.max(1, s.live))],
     ['Bloc vote', pct(result_.blocShare)],
-    ['Captured cells', pct(result_.captured / Math.max(1, result_.stations))],
     ['Stations', result_.stations],
   ] : [['Stations', 0]];
 
   document.getElementById('stats').innerHTML = rows
     .concat([
       ['&nbsp;', ''],
+      ['Hierarchy depth', s.depth.toFixed(1)],
+      ['Span of control', s.span.toFixed(1)],
+      ['Standard of living', model.meanE.toFixed(2)],
       ['Largest cell', s.eMax.toFixed(0)],
       ['Destroyed', s.destroyed],
       ['Divided', s.divided],
